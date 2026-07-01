@@ -1,0 +1,94 @@
+from datetime import datetime
+
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(255), default="")
+    hashed_password: Mapped[str] = mapped_column(String(255))
+    # role: admin | editor | viewer
+    role: Mapped[str] = mapped_column(String(20), default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Individual(Base):
+    __tablename__ = "individuals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    gedcom_id: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
+    first_name: Mapped[str] = mapped_column(String(255), default="")
+    last_name: Mapped[str] = mapped_column(String(255), default="")
+    maiden_name: Mapped[str] = mapped_column(String(255), default="")
+    sex: Mapped[str] = mapped_column(String(1), default="U")  # M | F | U
+    birth_date: Mapped[str] = mapped_column(String(100), default="")
+    birth_place: Mapped[str] = mapped_column(String(255), default="")
+    death_date: Mapped[str] = mapped_column(String(100), default="")
+    death_place: Mapped[str] = mapped_column(String(255), default="")
+    occupation: Mapped[str] = mapped_column(String(255), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    media: Mapped[list["Media"]] = relationship(
+        back_populates="individual", cascade="all, delete-orphan"
+    )
+
+
+class ParentChild(Base):
+    __tablename__ = "parent_child"
+    __table_args__ = (UniqueConstraint("parent_id", "child_id", name="uq_parent_child"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    child_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+
+
+class Spouse(Base):
+    __tablename__ = "spouses"
+    __table_args__ = (UniqueConstraint("a_id", "b_id", name="uq_spouse_pair"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    a_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    b_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    marriage_date: Mapped[str] = mapped_column(String(100), default="")
+    marriage_place: Mapped[str] = mapped_column(String(255), default="")
+
+
+class Media(Base):
+    __tablename__ = "media"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    individual_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    original_name: Mapped[str] = mapped_column(String(255), default="")
+    content_type: Mapped[str] = mapped_column(String(100), default="")
+    caption: Mapped[str] = mapped_column(String(255), default="")
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    individual: Mapped["Individual"] = relationship(back_populates="media")

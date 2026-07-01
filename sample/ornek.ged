@@ -1,0 +1,67 @@
+0 HEAD
+1 SOUR OrnekVeri
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Ahmet /Yılmaz/
+1 SEX M
+1 BIRT
+2 DATE 12 MAR 1940
+2 PLAC Ankara, Türkiye
+1 DEAT
+2 DATE 5 JAN 2015
+2 PLAC İstanbul, Türkiye
+1 OCCU Öğretmen
+0 @I2@ INDI
+1 NAME Fatma /Yılmaz/
+1 SEX F
+1 BIRT
+2 DATE 8 AUG 1945
+2 PLAC Konya, Türkiye
+1 OCCU Ev hanımı
+0 @I3@ INDI
+1 NAME Mehmet /Yılmaz/
+1 SEX M
+1 BIRT
+2 DATE 3 FEB 1968
+2 PLAC Ankara, Türkiye
+1 OCCU Mühendis
+0 @I4@ INDI
+1 NAME Ayşe /Demir/
+1 SEX F
+1 BIRT
+2 DATE 22 NOV 1970
+2 PLAC İzmir, Türkiye
+1 OCCU Doktor
+0 @I5@ INDI
+1 NAME Zeynep /Yılmaz/
+1 SEX F
+1 BIRT
+2 DATE 14 JUN 1995
+2 PLAC İstanbul, Türkiye
+1 OCCU Yazılım geliştirici
+0 @I6@ INDI
+1 NAME Can /Yılmaz/
+1 SEX M
+1 BIRT
+2 DATE 30 SEP 1998
+2 PLAC İstanbul, Türkiye
+1 OCCU Öğrenci
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 20 MAY 1965
+2 PLAC Ankara, Türkiye
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+1 CHIL @I5@
+1 CHIL @I6@
+1 MARR
+2 DATE 10 JUL 1993
+2 PLAC İstanbul, Türkiye
+0 TRLR
