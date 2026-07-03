@@ -442,9 +442,44 @@ async function renderTree() {
 }
 
 let treeSvg = null, treeG = null, treeZoom = null;
-const NODE_W = 150, NODE_H = 52;
-const GAP_X = NODE_W + 30;   // horizontal gap between siblings
-const GAP_Y = NODE_H + 70;   // vertical gap between generations
+const NODE_W = 160, NODE_H = 56;
+const SPOUSE_GAP = 18;       // gap between a couple's cards
+const GAP_X = NODE_W + 34;   // horizontal gap between siblings
+const GAP_Y = NODE_H + 64;   // vertical gap between generations
+const AV_X = -NODE_W / 2 + 24; // avatar circle center
+const TEXT_X = AV_X + 22;      // text block start
+
+const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
+
+// "Abdullah Hilmi BAYCAN" -> ["Abdullah Hilmi", "BAYCAN"]
+function nameLines(name) {
+  const parts = (name || "").trim().split(/\s+/);
+  if (parts.length < 2) return [name || "", ""];
+  return [parts.slice(0, -1).join(" "), parts[parts.length - 1]];
+}
+
+function initials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  const a = parts[0] ? parts[0][0] : "";
+  const b = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (a + b).toUpperCase();
+}
+
+function datesLabel(d) {
+  const b = (d.birth_date || "").trim();
+  const de = (d.death_date || "").trim();
+  if (!b && !de) return "";
+  return `${b || "?"} – ${de || ""}`.trim();
+}
+
+// Right-angled (elbow) connector, works both downward and upward.
+function elbowPath(d) {
+  const down = d.target.y > d.source.y;
+  const sy = d.source.y + (down ? NODE_H / 2 : -NODE_H / 2);
+  const ty = d.target.y + (down ? -NODE_H / 2 : NODE_H / 2);
+  const my = (sy + ty) / 2;
+  return `M${d.source.x},${sy} V${my} H${d.target.x} V${ty}`;
+}
 
 // Shared renderer: takes laid-out links/nodes, draws cards + zoom + fit.
 function drawTreeSvg(links, nodes, focusId = null) {
@@ -458,39 +493,79 @@ function drawTreeSvg(links, nodes, focusId = null) {
     .attr("width", width)
     .attr("height", height);
 
+  // Tüm kartlar aynı yerel koordinatları kullandığı için tek clipPath yeter.
+  svg.append("defs").append("clipPath").attr("id", "avatar-clip")
+    .append("circle").attr("cx", AV_X).attr("cy", 0).attr("r", 16);
+
   const g = svg.append("g");
+
+  // Ana kartlar + eş kartları ve çift bağlantıları.
+  const cards = [];
+  const coupleLinks = [];
+  nodes.forEach((d) => {
+    cards.push({ x: d.x, y: d.y, data: d.data,
+                 focus: focusId !== null && d.data.id === focusId });
+    (d.data.spouses || []).forEach((sp, i) => {
+      const sx = d.x + (i + 1) * (NODE_W + SPOUSE_GAP);
+      coupleLinks.push({ x1: sx - NODE_W - SPOUSE_GAP + NODE_W / 2, x2: sx - NODE_W / 2, y: d.y });
+      cards.push({ x: sx, y: d.y, data: sp, focus: false });
+    });
+  });
 
   g.selectAll("path.link")
     .data(links)
     .join("path")
     .attr("class", "link")
-    .attr("d", d3.linkVertical().x((d) => d.x).y((d) => d.y));
+    .attr("d", elbowPath);
 
-  const node = g.selectAll("g.node-card")
-    .data(nodes)
+  g.selectAll("line.couple-link")
+    .data(coupleLinks)
+    .join("line")
+    .attr("class", "couple-link")
+    .attr("x1", (c) => c.x1).attr("x2", (c) => c.x2)
+    .attr("y1", (c) => c.y).attr("y2", (c) => c.y);
+
+  const card = g.selectAll("g.node-card")
+    .data(cards)
     .join("g")
-    .attr("class", (d) =>
-      `node-card ${d.data.sex || "U"}${focusId !== null && d.data.id === focusId ? " focus" : ""}`)
-    .attr("transform", (d) => `translate(${d.x},${d.y})`)
+    .attr("class", (c) => `node-card ${c.data.sex || "U"}${c.focus ? " focus" : ""}`)
+    .attr("transform", (c) => `translate(${c.x},${c.y})`)
     .style("cursor", "pointer")
-    .on("click", (_, d) => selectFromTree(d.data.id));
+    .on("click", (_, c) => selectFromTree(c.data.id));
 
-  node.append("rect")
+  card.append("rect")
     .attr("x", -NODE_W / 2).attr("y", -NODE_H / 2)
-    .attr("width", NODE_W).attr("height", NODE_H).attr("rx", 6);
+    .attr("width", NODE_W).attr("height", NODE_H).attr("rx", 8);
 
-  node.append("text")
-    .attr("class", "name").attr("text-anchor", "middle").attr("dy", "-2")
-    .text((d) => d.data.name);
+  card.append("circle")
+    .attr("class", "avatar")
+    .attr("cx", AV_X).attr("cy", 0).attr("r", 16);
 
-  node.append("text")
-    .attr("class", "dates").attr("text-anchor", "middle").attr("dy", "14")
-    .text((d) => {
-      const b = (d.data.birth_date || "").trim();
-      const de = (d.data.death_date || "").trim();
-      if (!b && !de) return "";
-      return `${b || "?"} – ${de || ""}`.trim();
-    });
+  card.filter((c) => c.data.photo)
+    .append("image")
+    .attr("href", (c) => c.data.photo)
+    .attr("x", AV_X - 16).attr("y", -16)
+    .attr("width", 32).attr("height", 32)
+    .attr("preserveAspectRatio", "xMidYMid slice")
+    .attr("clip-path", "url(#avatar-clip)");
+
+  card.filter((c) => !c.data.photo)
+    .append("text")
+    .attr("class", "initials")
+    .attr("x", AV_X).attr("dy", "4")
+    .text((c) => initials(c.data.name));
+
+  card.append("text")
+    .attr("class", "name").attr("x", TEXT_X).attr("y", -9)
+    .text((c) => truncate(nameLines(c.data.name)[0], 15));
+
+  card.append("text")
+    .attr("class", "name").attr("x", TEXT_X).attr("y", 4)
+    .text((c) => truncate(nameLines(c.data.name)[1], 15));
+
+  card.append("text")
+    .attr("class", "dates").attr("x", TEXT_X).attr("y", 18)
+    .text((c) => truncate(datesLabel(c.data), 24));
 
   treeZoom = d3.zoom()
     .scaleExtent([0.05, 4])
@@ -502,15 +577,25 @@ function drawTreeSvg(links, nodes, focusId = null) {
   fitTree(false);
 }
 
+// Eş kartları sağa doğru eklendiği için komşu düğümlere ekstra boşluk bırak.
+function treeLayout() {
+  const spouseSpan = (NODE_W + SPOUSE_GAP) / GAP_X;
+  return d3.tree().nodeSize([GAP_X, GAP_Y]).separation((a, b) => {
+    const s = (a.data.spouses ? a.data.spouses.length : 0) +
+              (b.data.spouses ? b.data.spouses.length : 0);
+    return (a.parent === b.parent ? 1 : 1.2) + s * spouseSpan;
+  });
+}
+
 function drawPedigree(rootData) {
   const root = d3.hierarchy(rootData);
-  d3.tree().nodeSize([GAP_X, GAP_Y])(root);
+  treeLayout()(root);
   drawTreeSvg(root.links(), root.descendants());
 }
 
 // Odaklı mod: seçilen kişi ortada, tüm alt soy aşağı, üst soy yukarı açılır.
 function drawFocus(data) {
-  const layout = d3.tree().nodeSize([GAP_X, GAP_Y]);
+  const layout = treeLayout();
 
   const downRoot = d3.hierarchy(data.down);
   layout(downRoot);

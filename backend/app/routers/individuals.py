@@ -257,22 +257,36 @@ def pedigree(
 ):
     depth = max(1, min(depth, 30))
 
-    def build(node_id: int, level: int, seen: set[int], step, limit: int):
-        ind = db.get(Individual, node_id)
-        if ind is None or node_id in seen:
-            return None
-        seen = seen | {node_id}
-        node = {
+    def person_payload(ind: Individual) -> dict:
+        return {
             "id": ind.id,
             "name": f"{ind.first_name} {ind.last_name}".strip() or "(isimsiz)",
             "sex": ind.sex,
             "birth_date": ind.birth_date,
             "death_date": ind.death_date,
-            "children": [],
+            "photo": f"/uploads/{ind.media[0].filename}" if ind.media else None,
         }
+
+    def build(node_id: int, level: int, seen: set[int], step, limit: int,
+              include_spouses: bool = False):
+        ind = db.get(Individual, node_id)
+        if ind is None or node_id in seen:
+            return None
+        seen = seen | {node_id}
+        node = person_payload(ind)
+        node["children"] = []
+        node["spouses"] = []
+        if include_spouses:
+            rows = db.scalars(
+                select(Spouse).where(or_(Spouse.a_id == ind.id, Spouse.b_id == ind.id))
+            ).all()
+            for row in rows:
+                other = db.get(Individual, row.b_id if row.a_id == ind.id else row.a_id)
+                if other is not None and other.id not in seen:
+                    node["spouses"].append(person_payload(other))
         if level < limit:
             for related in step(db, ind.id):
-                child = build(related.id, level + 1, seen, step, limit)
+                child = build(related.id, level + 1, seen, step, limit, include_spouses)
                 if child:
                     node["children"].append(child)
         return node
@@ -285,7 +299,7 @@ def pedigree(
     if direction == "focus":
         # Alt soy sonuna kadar (güvenlik tavanı 30); üst soy, toplam nesil
         # sayısı depth limitini geçmeyecek kadar yukarı gider.
-        down = build(ind_id, 0, set(), _children, 30)
+        down = build(ind_id, 0, set(), _children, 30, include_spouses=True)
         if down is None:
             raise HTTPException(status_code=404, detail="Kişi bulunamadı")
         up_limit = max(0, depth - 1 - levels(down))
@@ -293,7 +307,8 @@ def pedigree(
         return {"mode": "focus", "down": down, "up": up}
 
     step = _children if direction == "down" else _parents
-    root = build(ind_id, 0, set(), step, depth)
+    # Atalar görünümünde eşler zaten ebeveyn düğümü olarak çizilir.
+    root = build(ind_id, 0, set(), step, depth, include_spouses=(direction == "down"))
     if root is None:
         raise HTTPException(status_code=404, detail="Kişi bulunamadı")
     return root

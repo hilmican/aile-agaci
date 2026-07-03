@@ -116,18 +116,24 @@ label input, label select { color: var(--ink); }
 
 /* Tree */
 .tree-controls { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.tree-canvas { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 70vh; min-height: 500px; }
+.tree-canvas { background: #edebe6; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 70vh; min-height: 500px; }
 .tree-canvas svg { display: block; cursor: grab; }
 .tree-canvas svg:active { cursor: grabbing; }
 .zoom-controls { display: flex; gap: 0.3rem; }
 .zoom-controls button { min-width: 2.2rem; }
-.node-card rect { fill: #fff; stroke: var(--border); stroke-width: 1.5px; rx: 6; }
-.node-card.M rect { stroke: var(--male); }
-.node-card.F rect { stroke: var(--female); }
-.node-card.focus rect { stroke-width: 3px; fill: #4a7c5912; }
-.node-card text.name { font-weight: 600; font-size: 11px; }
-.node-card text.dates { font-size: 9px; fill: var(--muted); }
-.link { fill: none; stroke: #c8c0b3; stroke-width: 1.5px; }
+.node-card rect { fill: #fff; stroke: #b3ada1; stroke-width: 1.5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.22)); }
+.node-card.M rect { fill: #d9ecf9; stroke: #5b9bd1; }
+.node-card.F rect { fill: #fbe0e6; stroke: #dd8ba1; }
+.node-card.U rect { fill: #f2efe8; stroke: #a9a294; }
+.node-card.focus rect { stroke-width: 3px; }
+.node-card circle.avatar { fill: #fff; stroke: rgba(0,0,0,0.18); stroke-width: 1px; }
+.node-card text.initials { font-size: 12px; font-weight: 700; text-anchor: middle; fill: #a9a294; }
+.node-card.M text.initials { fill: #5b9bd1; }
+.node-card.F text.initials { fill: #dd8ba1; }
+.node-card text.name { font-weight: 600; font-size: 11px; fill: #2f2c26; }
+.node-card text.dates { font-size: 9px; fill: #6f6a5e; }
+.link { fill: none; stroke: #b0aa9d; stroke-width: 2px; }
+.couple-link { stroke: #b0aa9d; stroke-width: 2px; }
 
 /* Import */
 .import-card { max-width: 640px; display: flex; flex-direction: column; gap: 0.8rem; align-items: flex-start; }
