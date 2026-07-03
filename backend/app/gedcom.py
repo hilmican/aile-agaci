@@ -6,7 +6,28 @@ It is deliberately forgiving — unknown tags are ignored rather than failing.
 """
 from __future__ import annotations
 
+import html
+import re
 from dataclasses import dataclass, field
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def clean_text(value: str, strip_tags: bool = False) -> str:
+    """Decode HTML entities (&Ccedil; -> Ç) and optionally strip markup.
+
+    MyHeritage and similar tools export NOTE (and sometimes other) fields with
+    HTML entities and <p> tags; we want plain readable text in the app.
+    """
+    out = value
+    for _ in range(3):  # handles double-encoded entities like &amp;Ccedil;
+        new = html.unescape(out)
+        if new == out:
+            break
+        out = new
+    if strip_tags:
+        out = _TAG_RE.sub(" ", out)
+    return " ".join(out.split())
 
 
 @dataclass
@@ -128,6 +149,13 @@ def parse_gedcom(text: str) -> GedcomData:
                     elif sub.tag == "GIVN":
                         ind.first_name = ind.first_name or sub.value.strip()
                 i += 1
+            ind.first_name = clean_text(ind.first_name)
+            ind.last_name = clean_text(ind.last_name)
+            ind.maiden_name = clean_text(ind.maiden_name)
+            ind.birth_place = clean_text(ind.birth_place)
+            ind.death_place = clean_text(ind.death_place)
+            ind.occupation = clean_text(ind.occupation)
+            ind.notes = clean_text(ind.notes, strip_tags=True)
             data.individuals[ind.xref] = ind
             continue
 
@@ -153,6 +181,7 @@ def parse_gedcom(text: str) -> GedcomData:
                     elif sub.tag == "PLAC":
                         fam.marriage_place = sub.value.strip()
                 i += 1
+            fam.marriage_place = clean_text(fam.marriage_place)
             data.families[fam.xref] = fam
             continue
 

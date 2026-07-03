@@ -427,29 +427,29 @@ function showInTree(id) {
   fillTreeRoots();
   state._treeShown = true; // explicit choice; don't override with default root
   $("#tree-root").value = id;
+  $("#tree-direction").value = "focus"; // kişi odaklı akış: odaklı mod
   renderTree();
 }
 
 async function renderTree() {
   const rootId = Number($("#tree-root").value);
-  const depth = Number($("#tree-depth").value) || 4;
+  const depth = Number($("#tree-depth").value) || 8;
   const direction = $("#tree-direction").value || "down";
   if (!rootId) return;
   const data = await api(`/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}`);
-  drawPedigree(data);
+  if (data.mode === "focus") drawFocus(data);
+  else drawPedigree(data);
 }
 
 let treeSvg = null, treeG = null, treeZoom = null;
+const NODE_W = 150, NODE_H = 52;
+const GAP_X = NODE_W + 30;   // horizontal gap between siblings
+const GAP_Y = NODE_H + 70;   // vertical gap between generations
 
-function drawPedigree(rootData) {
+// Shared renderer: takes laid-out links/nodes, draws cards + zoom + fit.
+function drawTreeSvg(links, nodes, focusId = null) {
   const canvas = $("#tree-canvas");
   canvas.innerHTML = "";
-
-  const root = d3.hierarchy(rootData);
-  const nodeW = 150, nodeH = 52;
-  const dx = nodeW + 30;   // horizontal gap between siblings
-  const dy = nodeH + 70;   // vertical gap between generations
-  d3.tree().nodeSize([dx, dy])(root);
 
   const width = canvas.clientWidth || 900;
   const height = Math.max(canvas.clientHeight, 560);
@@ -461,22 +461,23 @@ function drawPedigree(rootData) {
   const g = svg.append("g");
 
   g.selectAll("path.link")
-    .data(root.links())
+    .data(links)
     .join("path")
     .attr("class", "link")
     .attr("d", d3.linkVertical().x((d) => d.x).y((d) => d.y));
 
   const node = g.selectAll("g.node-card")
-    .data(root.descendants())
+    .data(nodes)
     .join("g")
-    .attr("class", (d) => `node-card ${d.data.sex || "U"}`)
+    .attr("class", (d) =>
+      `node-card ${d.data.sex || "U"}${focusId !== null && d.data.id === focusId ? " focus" : ""}`)
     .attr("transform", (d) => `translate(${d.x},${d.y})`)
     .style("cursor", "pointer")
     .on("click", (_, d) => selectFromTree(d.data.id));
 
   node.append("rect")
-    .attr("x", -nodeW / 2).attr("y", -nodeH / 2)
-    .attr("width", nodeW).attr("height", nodeH).attr("rx", 6);
+    .attr("x", -NODE_W / 2).attr("y", -NODE_H / 2)
+    .attr("width", NODE_W).attr("height", NODE_H).attr("rx", 6);
 
   node.append("text")
     .attr("class", "name").attr("text-anchor", "middle").attr("dy", "-2")
@@ -499,6 +500,29 @@ function drawPedigree(rootData) {
   treeSvg = svg;
   treeG = g;
   fitTree(false);
+}
+
+function drawPedigree(rootData) {
+  const root = d3.hierarchy(rootData);
+  d3.tree().nodeSize([GAP_X, GAP_Y])(root);
+  drawTreeSvg(root.links(), root.descendants());
+}
+
+// Odaklı mod: seçilen kişi ortada, tüm alt soy aşağı, üst soy yukarı açılır.
+function drawFocus(data) {
+  const layout = d3.tree().nodeSize([GAP_X, GAP_Y]);
+
+  const downRoot = d3.hierarchy(data.down);
+  layout(downRoot);
+
+  const upRoot = d3.hierarchy(data.up);
+  layout(upRoot);
+  upRoot.each((d) => { d.y = -d.y; }); // ataları yukarı aynala
+
+  const links = [...downRoot.links(), ...upRoot.links()];
+  // Odak kişi iki ağaçta da kök; üst ağaçtaki kopyasını çizme.
+  const nodes = [...downRoot.descendants(), ...upRoot.descendants().slice(1)];
+  drawTreeSvg(links, nodes, data.down.id);
 }
 
 function fitTree(animate = true) {

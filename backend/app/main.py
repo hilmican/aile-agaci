@@ -7,7 +7,8 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import Base, SessionLocal, engine, wait_for_db
-from .models import User
+from .gedcom import clean_text
+from .models import Individual, Spouse, User
 from .routers import auth, gedcom_router, individuals, users
 from .security import hash_password
 
@@ -31,12 +32,42 @@ def seed_admin() -> None:
         db.commit()
 
 
+def cleanup_imported_text() -> None:
+    """Daha önce içe aktarılmış kayıtlardaki HTML entity/tag kalıntılarını
+    temizler (&Ccedil;anakkale -> Çanakkale). İdempotent: temiz veri değişmez."""
+    text_fields = ("first_name", "last_name", "maiden_name",
+                   "birth_place", "death_place", "occupation")
+    with SessionLocal() as db:
+        changed = 0
+        for ind in db.scalars(select(Individual)).all():
+            for f in text_fields:
+                val = getattr(ind, f) or ""
+                new = clean_text(val)
+                if new != val:
+                    setattr(ind, f, new)
+                    changed += 1
+            notes = ind.notes or ""
+            new_notes = clean_text(notes, strip_tags=True)
+            if new_notes != notes:
+                ind.notes = new_notes
+                changed += 1
+        for sp in db.scalars(select(Spouse)).all():
+            val = sp.marriage_place or ""
+            new = clean_text(val)
+            if new != val:
+                sp.marriage_place = new
+                changed += 1
+        if changed:
+            db.commit()
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     wait_for_db()
     Base.metadata.create_all(bind=engine)
     os.makedirs(settings.upload_dir, exist_ok=True)
     seed_admin()
+    cleanup_imported_text()
 
 
 app.include_router(auth.router)

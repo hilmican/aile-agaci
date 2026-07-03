@@ -246,7 +246,7 @@ def _unlink_parent_child(db: Session, parent_id: int, child_id: int) -> None:
         db.delete(row)
 
 
-# ---- Pedigree (direction=up: ancestors, direction=down: descendants) ----
+# ---- Pedigree (up: atalar, down: alt soy, focus: tüm alt soy + kalan limit kadar üst soy) ----
 @router.get("/{ind_id}/pedigree")
 def pedigree(
     ind_id: int,
@@ -256,9 +256,8 @@ def pedigree(
     _: User = Depends(get_current_user),
 ):
     depth = max(1, min(depth, 30))
-    step = _children if direction == "down" else _parents
 
-    def build(node_id: int, level: int, seen: set[int]):
+    def build(node_id: int, level: int, seen: set[int], step, limit: int):
         ind = db.get(Individual, node_id)
         if ind is None or node_id in seen:
             return None
@@ -271,14 +270,30 @@ def pedigree(
             "death_date": ind.death_date,
             "children": [],
         }
-        if level < depth:
+        if level < limit:
             for related in step(db, ind.id):
-                child = build(related.id, level + 1, seen)
+                child = build(related.id, level + 1, seen, step, limit)
                 if child:
                     node["children"].append(child)
         return node
 
-    root = build(ind_id, 0, set())
+    def levels(node) -> int:
+        if not node["children"]:
+            return 0
+        return 1 + max(levels(c) for c in node["children"])
+
+    if direction == "focus":
+        # Alt soy sonuna kadar (güvenlik tavanı 30); üst soy, toplam nesil
+        # sayısı depth limitini geçmeyecek kadar yukarı gider.
+        down = build(ind_id, 0, set(), _children, 30)
+        if down is None:
+            raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+        up_limit = max(0, depth - 1 - levels(down))
+        up = build(ind_id, 0, set(), _parents, up_limit)
+        return {"mode": "focus", "down": down, "up": up}
+
+    step = _children if direction == "down" else _parents
+    root = build(ind_id, 0, set(), step, depth)
     if root is None:
         raise HTTPException(status_code=404, detail="Kişi bulunamadı")
     return root
