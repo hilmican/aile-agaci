@@ -833,5 +833,11 @@ window.addEventListener("unhandledrejection", (e) => {
   if (e.reason && e.reason.message) toast(e.reason.message, true);
 });
 
+/* ---------------- Build footer ---------------- */
+fetch("/api/version")
+  .then((r) => r.json())
+  .then((v) => { $("#build-footer").textContent = `v${v.version} · build ${v.build}`; })
+  .catch(() => {});
+
 /* ---------------- Start ---------------- */
 if (state.token) boot();

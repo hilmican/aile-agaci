@@ -81,6 +81,23 @@ def health():
     return {"status": "ok"}
 
 
+def _build_id() -> str:
+    path = os.path.join(os.path.dirname(__file__), "..", "build_id.txt")
+    try:
+        with open(path) as f:
+            return f.read().strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+BUILD_ID = _build_id()
+
+
+@app.get("/api/version")
+def version():
+    return {"build": BUILD_ID, "version": app.version}
+
+
 # Uploaded images
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir, check_dir=False), name="uploads")
 

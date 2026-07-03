@@ -127,6 +127,7 @@ label input, label select { color: var(--ink); }
 .combo-item { padding: 0.4rem 0.6rem; cursor: pointer; font-size: 0.85rem; }
 .combo-item:hover { background: #4a7c5915; }
 .combo-empty { padding: 0.4rem 0.6rem; color: var(--muted); font-size: 0.85rem; }
+.build-footer { position: fixed; bottom: 6px; right: 12px; font-size: 0.7rem; color: var(--muted); opacity: 0.75; pointer-events: none; z-index: 60; }
 .node-card rect { fill: #fff; stroke: #b3ada1; stroke-width: 1.5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.22)); }
 .node-card.M rect { fill: #d9ecf9; stroke: #5b9bd1; }
 .node-card.F rect { fill: #fbe0e6; stroke: #dd8ba1; }
