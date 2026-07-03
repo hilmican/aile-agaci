@@ -211,15 +211,17 @@ def _unlink_parent_child(db: Session, parent_id: int, child_id: int) -> None:
         db.delete(row)
 
 
-# ---- Pedigree (ancestors) ----
+# ---- Pedigree (direction=up: ancestors, direction=down: descendants) ----
 @router.get("/{ind_id}/pedigree")
 def pedigree(
     ind_id: int,
     depth: int = 4,
+    direction: str = "up",
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     depth = max(1, min(depth, 8))
+    step = _children if direction == "down" else _parents
 
     def build(node_id: int, level: int, seen: set[int]):
         ind = db.get(Individual, node_id)
@@ -235,8 +237,8 @@ def pedigree(
             "children": [],
         }
         if level < depth:
-            for parent in _parents(db, ind.id):
-                child = build(parent.id, level + 1, seen)
+            for related in step(db, ind.id):
+                child = build(related.id, level + 1, seen)
                 if child:
                     node["children"].append(child)
         return node

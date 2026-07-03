@@ -369,6 +369,20 @@ document.addEventListener("click", (e) => {
 });
 
 /* ---------------- Tree ---------------- */
+// Extract a sortable birth year from free-form dates like "12 MAR 1901" or "1901".
+function birthYear(p) {
+  const m = /\d{3,4}/.exec(p.birth_date || "");
+  return m ? Number(m[0]) : Infinity;
+}
+
+function oldestPersonId() {
+  let best = null;
+  state.people.forEach((p) => {
+    if (best === null || birthYear(p) < birthYear(best)) best = p;
+  });
+  return best ? best.id : null;
+}
+
 function populateTreeRoots() {
   const sel = $("#tree-root");
   const cur = sel.value;
@@ -376,7 +390,12 @@ function populateTreeRoots() {
     .map((p) => `<option value="${p.id}">${esc(fullName(p))}</option>`)
     .join("");
   if (cur) sel.value = cur;
-  else if (state.selectedId) sel.value = state.selectedId;
+  else {
+    // Default: start the tree from the oldest family member.
+    const oldest = oldestPersonId();
+    if (oldest) sel.value = oldest;
+    if (sel.value) renderTree();
+  }
 }
 
 $("#tree-render").addEventListener("click", renderTree);
@@ -394,8 +413,9 @@ function showInTree(id) {
 async function renderTree() {
   const rootId = Number($("#tree-root").value);
   const depth = Number($("#tree-depth").value) || 4;
+  const direction = $("#tree-direction").value || "down";
   if (!rootId) return;
-  const data = await api(`/api/individuals/${rootId}/pedigree?depth=${depth}`);
+  const data = await api(`/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}`);
   drawPedigree(data);
 }
 
@@ -404,7 +424,7 @@ function drawPedigree(rootData) {
   canvas.innerHTML = "";
 
   const root = d3.hierarchy(rootData);
-  const nodeW = 170, nodeH = 60;
+  const nodeW = 150, nodeH = 52;
   const dx = nodeH + 26;   // vertical gap between siblings
   const dy = nodeW + 60;   // horizontal gap between generations
   d3.tree().nodeSize([dx, dy])(root);
@@ -448,7 +468,7 @@ function drawPedigree(rootData) {
     .text((d) => d.data.name);
 
   node.append("text")
-    .attr("class", "dates").attr("text-anchor", "middle").attr("dy", "16")
+    .attr("class", "dates").attr("text-anchor", "middle").attr("dy", "14")
     .text((d) => {
       const b = (d.data.birth_date || "").trim();
       const de = (d.data.death_date || "").trim();

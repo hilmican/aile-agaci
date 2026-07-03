@@ -59,11 +59,16 @@
         <label>Kök kişi:
           <select id="tree-root"></select>
         </label>
+        <label>Yön:
+          <select id="tree-direction">
+            <option value="down" selected>Alt soy (çocuklara doğru)</option>
+            <option value="up">Atalar (ebeveynlere doğru)</option>
+          </select>
+        </label>
         <label>Nesil derinliği:
           <input type="number" id="tree-depth" min="1" max="8" value="4" />
         </label>
         <button id="tree-render">Göster</button>
-        <span class="muted">Atalar (soyağacı) yukarı doğru gösterilir.</span>
       </div>
       <div id="tree-canvas" class="tree-canvas"></div>
     </section>

@@ -120,8 +120,8 @@ label input, label select { color: var(--ink); }
 .node-card rect { fill: #fff; stroke: var(--border); stroke-width: 1.5px; rx: 6; }
 .node-card.M rect { stroke: var(--male); }
 .node-card.F rect { stroke: var(--female); }
-.node-card text.name { font-weight: 600; font-size: 13px; }
-.node-card text.dates { font-size: 11px; fill: var(--muted); }
+.node-card text.name { font-weight: 600; font-size: 11px; }
+.node-card text.dates { font-size: 9px; fill: var(--muted); }
 .link { fill: none; stroke: #c8c0b3; stroke-width: 1.5px; }
 
 /* Import */
