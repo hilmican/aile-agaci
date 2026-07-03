@@ -96,6 +96,41 @@ def create_individual(
     return _detail(db, ind)
 
 
+# NOTE: /{ind_id} rotasından önce tanımlanmalı, yoksa "tree-root" path'i onunla eşleşir.
+@router.get("/tree-root")
+def tree_root(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Ağaç için varsayılan kök: soyun tepesindeki (ebeveynsiz) kişilerden
+    en geniş alt soya sahip olanı; eşitlikte GEDCOM dosya sırasına göre ilki."""
+    all_ids = db.scalars(select(Individual.id)).all()
+    if not all_ids:
+        return {"id": None}
+
+    child_map: dict[int, list[int]] = {}
+    has_parent: set[int] = set()
+    for parent_id, child_id in db.execute(
+        select(ParentChild.parent_id, ParentChild.child_id)
+    ).all():
+        child_map.setdefault(parent_id, []).append(child_id)
+        has_parent.add(child_id)
+
+    roots = [i for i in all_ids if i not in has_parent] or list(all_ids)
+
+    def descendant_count(start: int) -> int:
+        seen: set[int] = set()
+        stack = [start]
+        while stack:
+            cur = stack.pop()
+            for c in child_map.get(cur, []):
+                if c not in seen:
+                    seen.add(c)
+                    stack.append(c)
+        return len(seen)
+
+    # En çok toruna sahip kök kazanır; eşitlikte küçük id (dosya sırası) önce gelir.
+    best = min(roots, key=lambda i: (-descendant_count(i), i))
+    return {"id": best}
+
+
 @router.get("/{ind_id}", response_model=IndividualDetail)
 def get_individual(ind_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     ind = db.get(Individual, ind_id)

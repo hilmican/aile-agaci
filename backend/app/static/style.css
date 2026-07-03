@@ -116,7 +116,11 @@ label input, label select { color: var(--ink); }
 
 /* Tree */
 .tree-controls { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.tree-canvas { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: auto; min-height: 500px; }
+.tree-canvas { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 70vh; min-height: 500px; }
+.tree-canvas svg { display: block; cursor: grab; }
+.tree-canvas svg:active { cursor: grabbing; }
+.zoom-controls { display: flex; gap: 0.3rem; }
+.zoom-controls button { min-width: 2.2rem; }
 .node-card rect { fill: #fff; stroke: var(--border); stroke-width: 1.5px; rx: 6; }
 .node-card.M rect { stroke: var(--male); }
 .node-card.F rect { stroke: var(--female); }

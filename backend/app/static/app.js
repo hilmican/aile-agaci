@@ -383,7 +383,8 @@ function oldestPersonId() {
   return best ? best.id : null;
 }
 
-function populateTreeRoots() {
+// Fill the root <select> without touching the current choice.
+function fillTreeRoots() {
   const sel = $("#tree-root");
   const cur = sel.value;
   sel.innerHTML = state.people
@@ -394,10 +395,24 @@ function populateTreeRoots() {
     })
     .join("");
   if (cur) sel.value = cur;
-  else {
-    // Default: start the tree from the oldest family member.
-    const oldest = oldestPersonId();
-    if (oldest) sel.value = oldest;
+}
+
+async function populateTreeRoots() {
+  const sel = $("#tree-root");
+  fillTreeRoots();
+  if (!sel.value || !state._treeShown) {
+    // Default: the eldest ancestor line from the GEDCOM (topmost parentless
+    // person with the largest descendant tree), not just the oldest birth date.
+    if (!state._treeShown) {
+      try {
+        const r = await api("/api/individuals/tree-root");
+        if (r && r.id) sel.value = r.id;
+      } catch (_) {
+        const oldest = oldestPersonId();
+        if (oldest) sel.value = oldest;
+      }
+      state._treeShown = true;
+    }
     if (sel.value) renderTree();
   }
 }
@@ -409,7 +424,8 @@ function showInTree(id) {
   document.querySelector('.tab[data-tab="tree"]').classList.add("active");
   $$(".tab-panel").forEach((p) => p.classList.add("hidden"));
   $("#tab-tree").classList.remove("hidden");
-  populateTreeRoots();
+  fillTreeRoots();
+  state._treeShown = true; // explicit choice; don't override with default root
   $("#tree-root").value = id;
   renderTree();
 }
@@ -423,29 +439,24 @@ async function renderTree() {
   drawPedigree(data);
 }
 
+let treeSvg = null, treeG = null, treeZoom = null;
+
 function drawPedigree(rootData) {
   const canvas = $("#tree-canvas");
   canvas.innerHTML = "";
 
   const root = d3.hierarchy(rootData);
   const nodeW = 150, nodeH = 52;
-  const dx = nodeH + 26;   // vertical gap between siblings
-  const dy = nodeW + 60;   // horizontal gap between generations
+  const dx = nodeW + 30;   // horizontal gap between siblings
+  const dy = nodeH + 70;   // vertical gap between generations
   d3.tree().nodeSize([dx, dy])(root);
 
-  let x0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  root.each((d) => {
-    if (d.x > x1) x1 = d.x;
-    if (d.x < x0) x0 = d.x;
-    if (d.y > y1) y1 = d.y;
-  });
+  const width = canvas.clientWidth || 900;
+  const height = Math.max(canvas.clientHeight, 560);
 
-  const height = x1 - x0 + dx * 2;
-  const width = y1 + dy;
   const svg = d3.select(canvas).append("svg")
-    .attr("width", width + 40)
-    .attr("height", height + 40)
-    .attr("viewBox", [-nodeW / 2 - 20, x0 - dx, width + 40, height + 40]);
+    .attr("width", width)
+    .attr("height", height);
 
   const g = svg.append("g");
 
@@ -453,13 +464,13 @@ function drawPedigree(rootData) {
     .data(root.links())
     .join("path")
     .attr("class", "link")
-    .attr("d", d3.linkHorizontal().x((d) => d.y).y((d) => d.x));
+    .attr("d", d3.linkVertical().x((d) => d.x).y((d) => d.y));
 
   const node = g.selectAll("g.node-card")
     .data(root.descendants())
     .join("g")
     .attr("class", (d) => `node-card ${d.data.sex || "U"}`)
-    .attr("transform", (d) => `translate(${d.y},${d.x})`)
+    .attr("transform", (d) => `translate(${d.x},${d.y})`)
     .style("cursor", "pointer")
     .on("click", (_, d) => selectFromTree(d.data.id));
 
@@ -479,7 +490,36 @@ function drawPedigree(rootData) {
       if (!b && !de) return "";
       return `${b || "?"} – ${de || ""}`.trim();
     });
+
+  treeZoom = d3.zoom()
+    .scaleExtent([0.05, 4])
+    .on("zoom", (e) => g.attr("transform", e.transform));
+  svg.call(treeZoom).on("dblclick.zoom", null);
+
+  treeSvg = svg;
+  treeG = g;
+  fitTree(false);
 }
+
+function fitTree(animate = true) {
+  if (!treeSvg || !treeG || !treeZoom) return;
+  const svgNode = treeSvg.node();
+  const box = treeG.node().getBBox();
+  if (!box.width || !box.height) return;
+  const w = svgNode.clientWidth || Number(treeSvg.attr("width"));
+  const h = svgNode.clientHeight || Number(treeSvg.attr("height"));
+  const scale = Math.min(w / (box.width + 40), h / (box.height + 40), 1.5);
+  const tx = w / 2 - scale * (box.x + box.width / 2);
+  const ty = h / 2 - scale * (box.y + box.height / 2);
+  const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+  (animate ? treeSvg.transition().duration(300) : treeSvg).call(treeZoom.transform, t);
+}
+
+$("#zoom-in").addEventListener("click", () =>
+  treeSvg && treeSvg.transition().duration(200).call(treeZoom.scaleBy, 1.3));
+$("#zoom-out").addEventListener("click", () =>
+  treeSvg && treeSvg.transition().duration(200).call(treeZoom.scaleBy, 1 / 1.3));
+$("#zoom-fit").addEventListener("click", () => fitTree());
 
 function selectFromTree(id) {
   $$(".tab").forEach((b) => b.classList.remove("active"));
