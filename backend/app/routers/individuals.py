@@ -96,14 +96,12 @@ def create_individual(
     return _detail(db, ind)
 
 
-# NOTE: /{ind_id} rotasından önce tanımlanmalı, yoksa "tree-root" path'i onunla eşleşir.
-@router.get("/tree-root")
-def tree_root(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def _default_root_id(db: Session) -> int | None:
     """Ağaç için varsayılan kök: soyun tepesindeki (ebeveynsiz) kişilerden
     en geniş alt soya sahip olanı; eşitlikte GEDCOM dosya sırasına göre ilki."""
     all_ids = db.scalars(select(Individual.id)).all()
     if not all_ids:
-        return {"id": None}
+        return None
 
     child_map: dict[int, list[int]] = {}
     has_parent: set[int] = set()
@@ -127,8 +125,13 @@ def tree_root(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         return len(seen)
 
     # En çok toruna sahip kök kazanır; eşitlikte küçük id (dosya sırası) önce gelir.
-    best = min(roots, key=lambda i: (-descendant_count(i), i))
-    return {"id": best}
+    return min(roots, key=lambda i: (-descendant_count(i), i))
+
+
+# NOTE: /{ind_id} rotasından önce tanımlanmalı, yoksa "tree-root" path'i onunla eşleşir.
+@router.get("/tree-root")
+def tree_root(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    return {"id": _default_root_id(db)}
 
 
 @router.get("/{ind_id}", response_model=IndividualDetail)
@@ -295,6 +298,14 @@ def pedigree(
         if not node["children"]:
             return 0
         return 1 + max(levels(c) for c in node["children"])
+
+    if direction == "full":
+        # Tam ağaç: en tepe atadan tüm soy; odak kişi vurgulanır/ortalanır.
+        root_id = _default_root_id(db)
+        if root_id is None:
+            raise HTTPException(status_code=404, detail="Ağaç boş")
+        tree = build(root_id, 0, set(), _children, 30, include_spouses=True)
+        return {"mode": "full", "root": tree, "focus_id": ind_id}
 
     if direction == "focus":
         # Alt soy sonuna kadar (güvenlik tavanı 30); üst soy, toplam nesil

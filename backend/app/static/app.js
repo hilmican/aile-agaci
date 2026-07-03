@@ -450,19 +450,32 @@ function pickTreeRoot(id) {
 
 async function populateTreeRoots() {
   fillTreeRoots();
-  if (!state._treeShown) {
-    // Default: the eldest ancestor line from the GEDCOM (topmost parentless
-    // person with the largest descendant tree), not just the oldest birth date.
+  if (state._treeShown) return;
+  state._treeShown = true;
+
+  // 1) Kaldığın yerden devam: kayıtlı kök + mod + derinlik.
+  const saved = loadTreeState();
+  if (saved && saved.rootId) {
+    if (saved.direction) $("#tree-direction").value = saved.direction;
+    if (saved.depth) $("#tree-depth").value = saved.depth;
+    setTreeRoot(Number(saved.rootId));
     try {
-      const r = await api("/api/individuals/tree-root");
-      if (r && r.id) setTreeRoot(r.id);
+      await renderTree();
+      return;
     } catch (_) {
-      const oldest = oldestPersonId();
-      if (oldest) setTreeRoot(oldest);
+      localStorage.removeItem(TREE_STATE_KEY); // kök silinmiş olabilir
     }
-    state._treeShown = true;
-    if (state.treeRootId) renderTree();
   }
+
+  // 2) Varsayılan: GEDCOM'daki en tepe ata.
+  try {
+    const r = await api("/api/individuals/tree-root");
+    if (r && r.id) setTreeRoot(r.id);
+  } catch (_) {
+    const oldest = oldestPersonId();
+    if (oldest) setTreeRoot(oldest);
+  }
+  if (state.treeRootId) renderTree();
 }
 
 $("#tree-render").addEventListener("click", renderTree);
@@ -479,15 +492,37 @@ function showInTree(id) {
   renderTree();
 }
 
+/* Ağaç durumu (kök + mod + derinlik) tarayıcıda saklanır: kaldığın yerden devam. */
+const TREE_STATE_KEY = "aile-tree-state";
+
+function saveTreeState() {
+  localStorage.setItem(TREE_STATE_KEY, JSON.stringify({
+    rootId: state.treeRootId,
+    direction: $("#tree-direction").value,
+    depth: $("#tree-depth").value,
+  }));
+}
+
+function loadTreeState() {
+  try { return JSON.parse(localStorage.getItem(TREE_STATE_KEY)) || null; }
+  catch (_) { return null; }
+}
+
 async function renderTree() {
   const rootId = Number(state.treeRootId);
   const depth = Number($("#tree-depth").value) || 8;
   const direction = $("#tree-direction").value || "down";
   if (!rootId) return;
   const data = await api(`/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}`);
+  saveTreeState();
   if (data.mode === "focus") drawFocus(data);
+  else if (data.mode === "full") drawFull(data);
   else drawPedigree(data);
 }
+
+// Mod/derinlik değişince yeniden çiz (kök seçiliyse).
+$("#tree-direction").addEventListener("change", () => state.treeRootId && renderTree());
+$("#tree-depth").addEventListener("change", () => state.treeRootId && renderTree());
 
 let treeSvg = null, treeG = null, treeZoom = null;
 const NODE_W = 160, NODE_H = 56;
@@ -530,7 +565,8 @@ function elbowPath(d) {
 }
 
 // Shared renderer: takes laid-out links/nodes, draws cards + zoom + fit.
-function drawTreeSvg(links, nodes, focusId = null) {
+// centerFocus: ekrana sığdırmak yerine görüntüyü odak kişiye ortala.
+function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   const canvas = $("#tree-canvas");
   canvas.innerHTML = "";
 
@@ -622,7 +658,19 @@ function drawTreeSvg(links, nodes, focusId = null) {
 
   treeSvg = svg;
   treeG = g;
+  if (centerFocus && focusId !== null) {
+    const fc = cards.find((c) => c.data.id === focusId);
+    if (fc) { centerOn(fc.x, fc.y); return; }
+  }
   fitTree(false);
+}
+
+function centerOn(x, y, scale = 0.9) {
+  const svgNode = treeSvg.node();
+  const w = svgNode.clientWidth || Number(treeSvg.attr("width"));
+  const h = svgNode.clientHeight || Number(treeSvg.attr("height"));
+  treeSvg.call(treeZoom.transform,
+    d3.zoomIdentity.translate(w / 2 - scale * x, h / 2 - scale * y).scale(scale));
 }
 
 // Eş kartları sağa doğru eklendiği için komşu düğümlere ekstra boşluk bırak.
@@ -639,6 +687,13 @@ function drawPedigree(rootData) {
   const root = d3.hierarchy(rootData);
   treeLayout()(root);
   drawTreeSvg(root.links(), root.descendants());
+}
+
+// Tam ağaç: en tepe atadan tüm soy; odak kişi vurgulu ve görüntü ona ortalı.
+function drawFull(data) {
+  const root = d3.hierarchy(data.root);
+  treeLayout()(root);
+  drawTreeSvg(root.links(), root.descendants(), data.focus_id, true);
 }
 
 // Odaklı mod: seçilen kişi ortada, tüm alt soy aşağı, üst soy yukarı açılır.
