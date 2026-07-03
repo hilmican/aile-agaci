@@ -57,7 +57,10 @@
     <section id="tab-tree" class="tab-panel hidden">
       <div class="tree-controls">
         <label>Kök kişi:
-          <select id="tree-root"></select>
+          <div class="combo" id="tree-root-combo">
+            <input type="text" id="tree-root-input" placeholder="Kişi ara…" autocomplete="off" />
+            <div class="combo-list hidden" id="tree-root-list"></div>
+          </div>
         </label>
         <label>Yön:
           <select id="tree-direction">

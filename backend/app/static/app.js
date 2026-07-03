@@ -383,37 +383,85 @@ function oldestPersonId() {
   return best ? best.id : null;
 }
 
-// Fill the root <select> without touching the current choice.
+const treeRootLabel = (p) => {
+  const y = birthYear(p);
+  return fullName(p) + (Number.isFinite(y) ? ` (${y})` : "");
+};
+
+function setTreeRoot(id) {
+  state.treeRootId = id;
+  const p = state.people.find((x) => x.id === id);
+  if (p) $("#tree-root-input").value = treeRootLabel(p);
+}
+
+// Seçili kişinin etiketini tazele (kişi listesi yenilendiğinde).
 function fillTreeRoots() {
-  const sel = $("#tree-root");
-  const cur = sel.value;
-  sel.innerHTML = state.people
-    .map((p) => {
-      const y = birthYear(p);
-      const label = fullName(p) + (Number.isFinite(y) ? ` (${y})` : "");
-      return `<option value="${p.id}">${esc(label)}</option>`;
-    })
-    .join("");
-  if (cur) sel.value = cur;
+  if (state.treeRootId) {
+    const p = state.people.find((x) => x.id === state.treeRootId);
+    if (p) $("#tree-root-input").value = treeRootLabel(p);
+  }
+}
+
+function renderRootList(q = "") {
+  const list = $("#tree-root-list");
+  const needle = q.trim().toLowerCase();
+  const items = state.people
+    .filter((p) => !needle ||
+      (fullName(p) + " " + (p.birth_date || "")).toLowerCase().includes(needle))
+    .slice(0, 60);
+  list.innerHTML = items
+    .map((p) => `<div class="combo-item" data-id="${p.id}">${esc(treeRootLabel(p))}</div>`)
+    .join("") || '<div class="combo-empty">Sonuç yok</div>';
+  list.classList.remove("hidden");
+}
+
+function pickTreeRoot(id) {
+  setTreeRoot(id);
+  $("#tree-root-list").classList.add("hidden");
+  renderTree();
+}
+
+{
+  const rootInput = $("#tree-root-input");
+  rootInput.addEventListener("input", () => renderRootList(rootInput.value));
+  rootInput.addEventListener("focus", () => {
+    rootInput.select();
+    renderRootList("");
+  });
+  rootInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const first = $("#tree-root-list .combo-item");
+      if (first) pickTreeRoot(Number(first.dataset.id));
+    } else if (e.key === "Escape") {
+      $("#tree-root-list").classList.add("hidden");
+    }
+  });
+  // mousedown: blur'dan önce çalışır, seçim kaybolmaz.
+  $("#tree-root-list").addEventListener("mousedown", (e) => {
+    const item = e.target.closest(".combo-item");
+    if (item) pickTreeRoot(Number(item.dataset.id));
+  });
+  rootInput.addEventListener("blur", () => setTimeout(() => {
+    fillTreeRoots(); // yarım kalan aramayı seçili etikete geri döndür
+    $("#tree-root-list").classList.add("hidden");
+  }, 150));
 }
 
 async function populateTreeRoots() {
-  const sel = $("#tree-root");
   fillTreeRoots();
-  if (!sel.value || !state._treeShown) {
+  if (!state._treeShown) {
     // Default: the eldest ancestor line from the GEDCOM (topmost parentless
     // person with the largest descendant tree), not just the oldest birth date.
-    if (!state._treeShown) {
-      try {
-        const r = await api("/api/individuals/tree-root");
-        if (r && r.id) sel.value = r.id;
-      } catch (_) {
-        const oldest = oldestPersonId();
-        if (oldest) sel.value = oldest;
-      }
-      state._treeShown = true;
+    try {
+      const r = await api("/api/individuals/tree-root");
+      if (r && r.id) setTreeRoot(r.id);
+    } catch (_) {
+      const oldest = oldestPersonId();
+      if (oldest) setTreeRoot(oldest);
     }
-    if (sel.value) renderTree();
+    state._treeShown = true;
+    if (state.treeRootId) renderTree();
   }
 }
 
@@ -426,13 +474,13 @@ function showInTree(id) {
   $("#tab-tree").classList.remove("hidden");
   fillTreeRoots();
   state._treeShown = true; // explicit choice; don't override with default root
-  $("#tree-root").value = id;
+  setTreeRoot(id);
   $("#tree-direction").value = "focus"; // kişi odaklı akış: odaklı mod
   renderTree();
 }
 
 async function renderTree() {
-  const rootId = Number($("#tree-root").value);
+  const rootId = Number(state.treeRootId);
   const depth = Number($("#tree-depth").value) || 8;
   const direction = $("#tree-direction").value || "down";
   if (!rootId) return;
