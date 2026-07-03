@@ -317,6 +317,20 @@ def pedigree(
             root_id = parents[0].id
             climbed += 1
         tree = build(root_id, 0, set(), _children, climbed + down_lv, include_spouses=True)
+
+        def center_focus(node) -> bool:
+            """Odak kişiyi içeren dalı kardeşlerinin ortasına taşı ki odak
+            ağacın kenarında değil görece merkezinde dursun."""
+            if node["id"] == ind_id:
+                return True
+            for i, child in enumerate(node["children"]):
+                if center_focus(child):
+                    mid = len(node["children"]) // 2
+                    node["children"].insert(mid, node["children"].pop(i))
+                    return True
+            return False
+
+        center_focus(tree)
         return {"mode": "full", "root": tree, "focus_id": ind_id}
 
     if direction == "focus":
