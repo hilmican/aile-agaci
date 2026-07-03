@@ -387,7 +387,11 @@ function populateTreeRoots() {
   const sel = $("#tree-root");
   const cur = sel.value;
   sel.innerHTML = state.people
-    .map((p) => `<option value="${p.id}">${esc(fullName(p))}</option>`)
+    .map((p) => {
+      const y = birthYear(p);
+      const label = fullName(p) + (Number.isFinite(y) ? ` (${y})` : "");
+      return `<option value="${p.id}">${esc(label)}</option>`;
+    })
     .join("");
   if (cur) sel.value = cur;
   else {
