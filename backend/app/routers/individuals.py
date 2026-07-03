@@ -300,11 +300,12 @@ def pedigree(
         return 1 + max(levels(c) for c in node["children"])
 
     if direction == "full":
-        # Tam ağaç: en tepe atadan tüm soy; odak kişi vurgulanır/ortalanır.
+        # Tam ağaç: en tepe atadan seçilen derinliğe kadar tüm bireyler;
+        # odak kişi (görünürse) vurgulanır ve görüntü ona ortalanır.
         root_id = _default_root_id(db)
         if root_id is None:
             raise HTTPException(status_code=404, detail="Ağaç boş")
-        tree = build(root_id, 0, set(), _children, 30, include_spouses=True)
+        tree = build(root_id, 0, set(), _children, depth, include_spouses=True)
         return {"mode": "full", "root": tree, "focus_id": ind_id}
 
     if direction == "focus":
