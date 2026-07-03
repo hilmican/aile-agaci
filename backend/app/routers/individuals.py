@@ -220,7 +220,7 @@ def pedigree(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    depth = max(1, min(depth, 8))
+    depth = max(1, min(depth, 30))
     step = _children if direction == "down" else _parents
 
     def build(node_id: int, level: int, seen: set[int]):
