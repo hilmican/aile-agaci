@@ -255,6 +255,7 @@ def pedigree(
     ind_id: int,
     depth: int = 4,
     direction: str = "up",
+    lineage: str = "auto",  # tam ağaç tırmanma kolu: auto | father | mother
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -325,12 +326,21 @@ def pedigree(
             parents = _parents(db, root_id)
             if not parents:
                 break
-            # Bütçeyi olabildiğince kullanmak için en derin ata koluna tırman.
-            remaining = budget - climbed - 1
-            root_id = max(
-                parents,
-                key=lambda p: ancestor_height(p.id, remaining, frozenset({p.id})),
-            ).id
+            if lineage in ("father", "mother"):
+                # İstenen kol: babadan babaya / anneden anneye. Kol kayıtlı
+                # değilse zincir orada biter (öbür kola sapılmaz).
+                want = "M" if lineage == "father" else "F"
+                match = [p for p in parents if p.sex == want]
+                if not match:
+                    break
+                root_id = match[0].id
+            else:
+                # Otomatik: bütçeyi olabildiğince kullanmak için en derin ata koluna tırman.
+                remaining = budget - climbed - 1
+                root_id = max(
+                    parents,
+                    key=lambda p: ancestor_height(p.id, remaining, frozenset({p.id})),
+                ).id
             climbed += 1
         # Pencere kökten itibaren tam depth nesil: tırmanma kısa kalsa bile
         # diğer dallar kalan derinliği kullanabilsin.

@@ -458,6 +458,8 @@ async function populateTreeRoots() {
   if (saved && saved.rootId) {
     if (saved.direction) $("#tree-direction").value = saved.direction;
     if (saved.depth) $("#tree-depth").value = saved.depth;
+    if (saved.lineage) $("#tree-lineage").value = saved.lineage;
+    updateLineageVisibility();
     setTreeRoot(Number(saved.rootId));
     try {
       await renderTree();
@@ -489,6 +491,7 @@ function showInTree(id) {
   state._treeShown = true; // explicit choice; don't override with default root
   setTreeRoot(id);
   $("#tree-direction").value = "focus"; // kişi odaklı akış: odaklı mod
+  updateLineageVisibility();
   renderTree();
 }
 
@@ -500,6 +503,7 @@ function saveTreeState() {
     rootId: state.treeRootId,
     direction: $("#tree-direction").value,
     depth: $("#tree-depth").value,
+    lineage: $("#tree-lineage").value,
   }));
 }
 
@@ -512,17 +516,28 @@ async function renderTree() {
   const rootId = Number(state.treeRootId);
   const depth = Number($("#tree-depth").value) || 8;
   const direction = $("#tree-direction").value || "down";
+  const lineage = $("#tree-lineage").value || "auto";
   if (!rootId) return;
-  const data = await api(`/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}`);
+  const data = await api(
+    `/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}&lineage=${lineage}`);
   saveTreeState();
   if (data.mode === "focus") drawFocus(data);
   else if (data.mode === "full") drawFull(data);
   else drawPedigree(data);
 }
 
-// Mod/derinlik değişince yeniden çiz (kök seçiliyse).
-$("#tree-direction").addEventListener("change", () => state.treeRootId && renderTree());
+// Soy kolu seçimi yalnız tam ağaç modunda anlamlı.
+function updateLineageVisibility() {
+  $("#lineage-label").classList.toggle("hidden", $("#tree-direction").value !== "full");
+}
+
+// Mod/derinlik/soy kolu değişince yeniden çiz (kök seçiliyse).
+$("#tree-direction").addEventListener("change", () => {
+  updateLineageVisibility();
+  if (state.treeRootId) renderTree();
+});
 $("#tree-depth").addEventListener("change", () => state.treeRootId && renderTree());
+$("#tree-lineage").addEventListener("change", () => state.treeRootId && renderTree());
 
 let treeSvg = null, treeG = null, treeZoom = null;
 const NODE_W = 160, NODE_H = 56;
