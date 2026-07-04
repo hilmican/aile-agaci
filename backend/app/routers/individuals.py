@@ -309,14 +309,32 @@ def pedigree(
             raise HTTPException(status_code=404, detail="Kişi bulunamadı")
         down_lv = levels(down)
         budget = max(0, depth - 1 - down_lv)
+
+        def ancestor_height(pid: int, cap: int, seen: frozenset) -> int:
+            """cap sınırı içinde pid'den yukarı en uzun ata zinciri."""
+            if cap <= 0:
+                return 0
+            best = 0
+            for par in _parents(db, pid):
+                if par.id not in seen:
+                    best = max(best, 1 + ancestor_height(par.id, cap - 1, seen | {par.id}))
+            return best
+
         root_id, climbed = ind_id, 0
         while climbed < budget:
             parents = _parents(db, root_id)
             if not parents:
                 break
-            root_id = parents[0].id
+            # Bütçeyi olabildiğince kullanmak için en derin ata koluna tırman.
+            remaining = budget - climbed - 1
+            root_id = max(
+                parents,
+                key=lambda p: ancestor_height(p.id, remaining, frozenset({p.id})),
+            ).id
             climbed += 1
-        tree = build(root_id, 0, set(), _children, climbed + down_lv, include_spouses=True)
+        # Pencere kökten itibaren tam depth nesil: tırmanma kısa kalsa bile
+        # diğer dallar kalan derinliği kullanabilsin.
+        tree = build(root_id, 0, set(), _children, depth - 1, include_spouses=True)
 
         def center_focus(node) -> bool:
             """Odak kişiyi içeren dalı kardeşlerinin ortasına taşı ki odak
