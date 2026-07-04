@@ -116,7 +116,15 @@ label input, label select { color: var(--ink); }
 
 /* Tree */
 .tree-controls { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.tree-canvas { background: #edebe6; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 70vh; min-height: 500px; }
+.tree-canvas { position: relative; background: #edebe6; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 70vh; min-height: 500px; }
+.magnifier { position: absolute; width: 360px; height: 270px; max-width: 45%; max-height: 45%; border: 2px solid #8a8577; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.3), 0 0 0 4px rgba(255,255,255,0.55); overflow: hidden; pointer-events: none; z-index: 40; opacity: 0.98; transition: opacity 0.12s ease; }
+.magnifier.hidden { display: none; }
+.magnifier .mag-bg { fill: #f3f1ea; }
+.magnifier .mag-cursor { fill: none; stroke: #4a7c59; stroke-width: 2px; stroke-dasharray: 4 3; }
+.mag-tl { top: 14px; left: 14px; }
+.mag-tr { top: 14px; right: 14px; }
+.mag-bl { bottom: 14px; left: 14px; }
+.mag-br { bottom: 14px; right: 14px; }
 .tree-canvas svg { display: block; cursor: grab; }
 .tree-canvas svg:active { cursor: grabbing; }
 .zoom-controls { display: flex; gap: 0.3rem; }

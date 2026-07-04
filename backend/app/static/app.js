@@ -596,7 +596,10 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   svg.append("defs").append("clipPath").attr("id", "avatar-clip")
     .append("circle").attr("cx", AV_X).attr("cy", 0).attr("r", 16);
 
-  const g = svg.append("g");
+  // gZoom pan/zoom taşır; g (statik içerik) mercek tarafından <use> ile
+  // yeniden çizilebilsin diye transform'suz kalır.
+  const gZoom = svg.append("g");
+  const g = gZoom.append("g").attr("id", "tree-content");
 
   // Ana kartlar + eş kartları ve çift bağlantıları.
   const cards = [];
@@ -668,8 +671,24 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
 
   treeZoom = d3.zoom()
     .scaleExtent([0.05, 4])
-    .on("zoom", (e) => g.attr("transform", e.transform));
+    .on("zoom", (e) => {
+      gZoom.attr("transform", e.transform);
+      if (e.transform.k >= MAG_THRESHOLD) hideMagnifier();
+    });
   svg.call(treeZoom).on("dblclick.zoom", null);
+
+  // Mercek: fit halinde kartlar okunmazken imlecin altını büyütülmüş gösterir.
+  const mag = d3.select(canvas).append("div")
+    .attr("class", "magnifier hidden").attr("id", "magnifier");
+  const magSvg = mag.append("svg").attr("width", "100%").attr("height", "100%");
+  magSvg.append("rect").attr("class", "mag-bg")
+    .attr("width", "100%").attr("height", "100%");
+  magSvg.append("use").attr("id", "mag-view").attr("href", "#tree-content");
+  magSvg.append("circle").attr("class", "mag-cursor")
+    .attr("cx", "50%").attr("cy", "50%").attr("r", 10);
+
+  svg.on("mousemove", updateMagnifier);
+  svg.on("mouseleave", hideMagnifier);
 
   treeSvg = svg;
   treeG = g;
@@ -678,6 +697,39 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
     if (fc) { centerOn(fc.x, fc.y); return; }
   }
   fitTree(false);
+}
+
+/* ---- Mercek (loupe) ---- */
+const MAG_THRESHOLD = 0.55; // bu ölçeğin üstünde kartlar zaten okunur, mercek gizli
+const MAG_SCALE = 0.9;      // mercek içindeki büyütme
+
+function hideMagnifier() {
+  const mag = $("#magnifier");
+  if (mag) mag.classList.add("hidden");
+}
+
+function updateMagnifier(event) {
+  const mag = $("#magnifier");
+  if (!mag || !treeSvg) return;
+  const svgNode = treeSvg.node();
+  const t = d3.zoomTransform(svgNode);
+  if (t.k >= MAG_THRESHOLD) { mag.classList.add("hidden"); return; }
+
+  const [mx, my] = d3.pointer(event, svgNode);
+  const w = svgNode.clientWidth, h = svgNode.clientHeight;
+
+  // İmlecin ağaç koordinatındaki karşılığını merceğin merkezine getir.
+  const tx = (mx - t.x) / t.k;
+  const ty = (my - t.y) / t.k;
+  const mw = mag.clientWidth || 340, mh = mag.clientHeight || 260;
+  $("#mag-view").setAttribute("transform",
+    `translate(${mw / 2 - MAG_SCALE * tx},${mh / 2 - MAG_SCALE * ty}) scale(${MAG_SCALE})`);
+
+  // Panel, imlecin çapraz karşı köşesinde durur ki bakılan yeri örtmesin.
+  mag.classList.remove("mag-tl", "mag-tr", "mag-bl", "mag-br", "hidden");
+  const vert = my < h / 2 ? "b" : "t";
+  const horiz = mx < w / 2 ? "r" : "l";
+  mag.classList.add(`mag-${vert}${horiz}`);
 }
 
 function centerOn(x, y, scale = 0.9) {
