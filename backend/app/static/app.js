@@ -701,7 +701,7 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
 
 /* ---- Mercek (loupe) ---- */
 const MAG_THRESHOLD = 0.55; // bu ölçeğin üstünde kartlar zaten okunur, mercek gizli
-const MAG_SCALE = 0.9;      // mercek içindeki büyütme
+const MAG_SCALE = 0.7;      // mercek içindeki büyütme
 
 function hideMagnifier() {
   const mag = $("#magnifier");
@@ -725,11 +725,9 @@ function updateMagnifier(event) {
   $("#mag-view").setAttribute("transform",
     `translate(${mw / 2 - MAG_SCALE * tx},${mh / 2 - MAG_SCALE * ty}) scale(${MAG_SCALE})`);
 
-  // Panel, imlecin çapraz karşı köşesinde durur ki bakılan yeri örtmesin.
-  mag.classList.remove("mag-tl", "mag-tr", "mag-bl", "mag-br", "hidden");
-  const vert = my < h / 2 ? "b" : "t";
-  const horiz = mx < w / 2 ? "r" : "l";
-  mag.classList.add(`mag-${vert}${horiz}`);
+  // Panel imlecin karşı yakasında durur (yalnız sağ/sol değişir).
+  mag.classList.remove("mag-l", "mag-r", "hidden");
+  mag.classList.add(mx < w / 2 ? "mag-r" : "mag-l");
 }
 
 function centerOn(x, y, scale = 0.9) {
