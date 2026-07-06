@@ -46,6 +46,18 @@ const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])));
 
 const fullName = (p) => `${p.first_name || ""} ${p.last_name || ""}`.trim() || "(isimsiz)";
+
+// Liste/arama sonuçlarında ikinci satır: "12 MAR 1940 – 2 MAR 1980 · Çiftçi"
+function personSub(p) {
+  const bits = [];
+  const b = (p.birth_date || "").trim();
+  const d = (p.death_date || "").trim();
+  if (b && d) bits.push(`${b} – ${d}`);
+  else if (b) bits.push(`d. ${b}`);
+  else if (d) bits.push(`ö. ${d}`);
+  if ((p.occupation || "").trim()) bits.push(p.occupation.trim());
+  return bits.join(" · ");
+}
 const canEdit = () => state.user && (state.user.role === "admin" || state.user.role === "editor");
 const isAdmin = () => state.user && state.user.role === "admin";
 
@@ -97,21 +109,65 @@ async function boot() {
 
   await loadPeople();
   if (isAdmin()) loadUsers();
+  await applyHash(); // paylaşılan URL varsa o görünümü aç
 }
 
 const roleLabel = (r) => ({ admin: "Yönetici", editor: "Düzenleyici", viewer: "Görüntüleyici" }[r] || r);
 
 /* ---------------- Tabs ---------------- */
+function switchTab(tab) {
+  $$(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  $$(".tab-panel").forEach((p) => p.classList.add("hidden"));
+  $("#tab-" + tab).classList.remove("hidden");
+}
+
 $$(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
-    $$(".tab").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
     const tab = btn.dataset.tab;
-    $$(".tab-panel").forEach((p) => p.classList.add("hidden"));
-    $("#tab-" + tab).classList.remove("hidden");
+    switchTab(tab);
+    updateHash({ tab });
     if (tab === "tree") populateTreeRoots();
   });
 });
+
+/* ---------------- Paylaşılabilir URL'ler (hash) ---------------- */
+function updateHash(params) {
+  history.replaceState(null, "", "#" + new URLSearchParams(params).toString());
+}
+
+// URL'deki durumu uygula: #tab=tree&root=..&dir=..&depth=..&lineage=..
+// veya #tab=people&person=..  Login sonrası da çalışır (boot çağırır).
+async function applyHash() {
+  const h = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+  const tab = h.get("tab");
+  if (!tab) return false;
+
+  if (tab === "tree" && h.get("root")) {
+    if (h.get("dir")) $("#tree-direction").value = h.get("dir");
+    if (h.get("depth")) $("#tree-depth").value = h.get("depth");
+    if (h.get("lineage")) $("#tree-lineage").value = h.get("lineage");
+    updateLineageVisibility();
+    switchTab("tree");
+    state._treeShown = true; // URL'deki durum varsayılanı ezer
+    fillTreeRoots();
+    setTreeRoot(Number(h.get("root")));
+    try { await renderTree(); } catch (_) {}
+    return true;
+  }
+  if (tab === "people" && h.get("person")) {
+    switchTab("people");
+    try { await selectPerson(Number(h.get("person"))); } catch (_) {}
+    return true;
+  }
+  if (["people", "tree", "import", "users"].includes(tab)) {
+    switchTab(tab);
+    if (tab === "tree") populateTreeRoots();
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener("hashchange", applyHash);
 
 /* ---------------- People ---------------- */
 let searchTimer;
@@ -132,7 +188,10 @@ function renderPeopleList() {
   state.people.forEach((p) => {
     const li = document.createElement("li");
     li.className = p.id === state.selectedId ? "active" : "";
-    li.innerHTML = `<span class="sex-dot ${esc(p.sex)}"></span> ${esc(fullName(p))}`;
+    const sub = personSub(p);
+    li.innerHTML = `<span class="sex-dot ${esc(p.sex)}"></span>
+      <span class="li-main">${esc(fullName(p))}
+        ${sub ? `<span class="li-sub">${esc(sub)}</span>` : ""}</span>`;
     li.addEventListener("click", () => selectPerson(p.id));
     ul.appendChild(li);
   });
@@ -145,6 +204,7 @@ async function selectPerson(id) {
   renderPeopleList();
   const person = await api("/api/individuals/" + id);
   renderDetail(person);
+  updateHash({ tab: "people", person: id });
 }
 
 function renderDetail(p) {
@@ -407,10 +467,17 @@ function renderRootList(q = "") {
   const needle = q.trim().toLowerCase();
   const items = state.people
     .filter((p) => !needle ||
-      (fullName(p) + " " + (p.birth_date || "")).toLowerCase().includes(needle))
+      (fullName(p) + " " + (p.birth_date || "") + " " + (p.occupation || ""))
+        .toLowerCase().includes(needle))
     .slice(0, 60);
   list.innerHTML = items
-    .map((p) => `<div class="combo-item" data-id="${p.id}">${esc(treeRootLabel(p))}</div>`)
+    .map((p) => {
+      const sub = personSub(p);
+      return `<div class="combo-item" data-id="${p.id}">
+        <div>${esc(fullName(p))}</div>
+        ${sub ? `<div class="combo-sub">${esc(sub)}</div>` : ""}
+      </div>`;
+    })
     .join("") || '<div class="combo-empty">Sonuç yok</div>';
   list.classList.remove("hidden");
 }
@@ -521,6 +588,7 @@ async function renderTree() {
   const data = await api(
     `/api/individuals/${rootId}/pedigree?depth=${depth}&direction=${direction}&lineage=${lineage}`);
   saveTreeState();
+  updateHash({ tab: "tree", root: rootId, dir: direction, depth, lineage });
   if (data.mode === "focus") drawFocus(data);
   else if (data.mode === "full") drawFull(data);
   else drawPedigree(data);

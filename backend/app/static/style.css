@@ -91,6 +91,9 @@ label input, label select { color: var(--ink); }
 .people-list li { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
 .people-list li:hover { background: #0000000a; }
 .people-list li.active { background: #4a7c5920; }
+.li-main { display: flex; flex-direction: column; line-height: 1.25; }
+.li-sub { font-size: 0.72rem; color: var(--muted); }
+.combo-sub { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
 .sex-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
 .sex-dot.M { background: var(--male); }
 .sex-dot.F { background: var(--female); }
