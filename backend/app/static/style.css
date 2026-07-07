@@ -162,6 +162,14 @@ label input, label select { color: var(--ink); }
 .health-issue { font-size: 0.85rem; margin-bottom: 0.5rem; }
 .health-issue .chips { margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
 
+/* Eşler */
+.spouse-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.spouse-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.sp-info { font-size: 0.82rem; color: var(--muted); }
+.sp-edit-btn { padding: 0.1rem 0.4rem; }
+.sp-edit { display: flex; gap: 0.4rem; flex-wrap: wrap; flex-basis: 100%; margin-top: 0.2rem; }
+.sp-edit input { font-size: 0.85rem; }
+
 /* Yaşadığı yerler — zaman çizelgesi */
 .res-timeline { list-style: none; margin: 0.3rem 0 0; padding: 0; }
 .res-timeline li { position: relative; padding: 0 0 0.9rem 1.4rem; }

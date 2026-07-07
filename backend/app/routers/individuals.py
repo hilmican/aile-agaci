@@ -21,6 +21,7 @@ from ..schemas import (
     ResidenceCreate,
     ResidenceOut,
     SpouseLink,
+    SpouseUpdate,
 )
 import re as _re
 from ..security import get_current_user, require_editor
@@ -227,6 +228,31 @@ def add_relationship(
     rel_tr = {"parent": "ebeveyn", "child": "çocuk", "spouse": "eş"}[payload.type]
     other_name = f"{other.first_name} {other.last_name}".strip() or "(isimsiz)"
     log_activity(db, user, "relationship_added", ind, f"{rel_tr}: {other_name}")
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.patch("/{ind_id}/spouses/{other_id}")
+def update_spouse(
+    ind_id: int,
+    other_id: int,
+    payload: SpouseUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    a, b = sorted((ind_id, other_id))
+    row = db.scalar(select(Spouse).where(Spouse.a_id == a, Spouse.b_id == b))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Evlilik kaydı bulunamadı")
+    if payload.marriage_date is not None:
+        row.marriage_date = payload.marriage_date.strip()
+    if payload.marriage_place is not None:
+        row.marriage_place = payload.marriage_place.strip()
+    ind = db.get(Individual, ind_id)
+    other = db.get(Individual, other_id)
+    other_name = (f"{other.first_name} {other.last_name}".strip() or "(isimsiz)") if other else ""
+    if ind is not None:
+        log_activity(db, user, "marriage_updated", ind, other_name)
     db.commit()
     return {"status": "ok"}
 

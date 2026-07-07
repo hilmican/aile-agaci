@@ -84,6 +84,11 @@ class IndividualSummary(IndividualBase):
     id: int
 
 
+class SpouseUpdate(BaseModel):
+    marriage_date: str | None = None
+    marriage_place: str | None = None
+
+
 class SpouseLink(BaseModel):
     person: IndividualSummary
     marriage_date: str = ""

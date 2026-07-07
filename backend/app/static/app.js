@@ -256,7 +256,7 @@ function renderDetail(p) {
     ${contactSection(p)}
 
     ${relSection("Ebeveynler", "parent", p.parents)}
-    ${relSection("Eş(ler)", "spouse", p.spouses.map((s) => s.person))}
+    ${spouseSection(p.spouses)}
     ${relSection("Çocuklar", "child", p.children)}
 
     <div class="rel-section">
@@ -336,6 +336,22 @@ function renderDetail(p) {
         toast("Silindi");
         selectPerson(p.id);
       }));
+    $$("[data-sp-edit]").forEach((btn) =>
+      btn.addEventListener("click", () =>
+        document.querySelector(`[data-sp-form="${btn.dataset.spEdit}"]`)?.classList.toggle("hidden")));
+    $$("[data-sp-save]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const form = document.querySelector(`[data-sp-form="${btn.dataset.spSave}"]`);
+        await api(`/api/individuals/${p.id}/spouses/${btn.dataset.spSave}`, {
+          method: "PATCH",
+          json: {
+            marriage_date: form.querySelector(".sp-md").value.trim(),
+            marriage_place: form.querySelector(".sp-mp").value.trim(),
+          },
+        });
+        toast("Evlilik bilgisi güncellendi");
+        selectPerson(p.id);
+      }));
     $$("[data-rel]").forEach((chip) => {
       chip.querySelector(".x")?.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -365,6 +381,35 @@ function relSection(title, relType, people) {
     <h3>${esc(title)}</h3>
     <div class="rel-chips">${chips || '<span class="muted">—</span>'}</div>
     <div class="rel-adder" data-adder="${relType}"></div>
+  </div>`;
+}
+
+// Eşler: evlilik tarihi/yeri gösterilir ve düzenlenebilir.
+function spouseSection(spouses) {
+  const rows = spouses.map((s) => {
+    const p = s.person;
+    const x = canEdit() ? `<span class="x" title="Kaldır">×</span>` : "";
+    const md = trDate((s.marriage_date || "").trim());
+    const mp = (s.marriage_place || "").trim();
+    const info = [md && `💍 ${esc(md)}`, mp && esc(mp)].filter(Boolean).join(" · ");
+    const edit = canEdit()
+      ? `<button class="small ghost sp-edit-btn" data-sp-edit="${p.id}" title="Evlilik bilgisi">✏️</button>` : "";
+    const form = canEdit() ? `<div class="sp-edit hidden" data-sp-form="${p.id}">
+        <input type="text" class="sp-md" placeholder="Evlilik tarihi" value="${esc(s.marriage_date || "")}" />
+        <input type="text" class="sp-mp" placeholder="Evlilik yeri" value="${esc(s.marriage_place || "")}" />
+        <button class="small sp-save" data-sp-save="${p.id}">Kaydet</button>
+      </div>` : "";
+    return `<div class="spouse-row">
+      <span class="chip" data-rel="spouse" data-relid="${p.id}" data-goto="${p.id}">${esc(fullName(p))} ${x}</span>
+      ${info ? `<span class="sp-info">${info}</span>` : ""}
+      ${edit}
+      ${form}
+    </div>`;
+  }).join("");
+  return `<div class="rel-section">
+    <h3>Eş(ler)</h3>
+    <div class="spouse-list">${rows || '<span class="muted">—</span>'}</div>
+    <div class="rel-adder" data-adder="spouse"></div>
   </div>`;
 }
 
@@ -1254,6 +1299,7 @@ async function loadDashboard() {
     media_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir görseli sildi`,
     anecdote_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> hakkında bir anekdot ekledi${f.detail ? `: “${esc(f.detail)}”` : ""}`,
     anecdote_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir anekdotu sildi`,
+    marriage_updated: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b>${f.detail ? ` – ${esc(f.detail)}` : ""} evlilik bilgisini güncelledi`,
     residence_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için yaşadığı yer ekledi${f.detail ? `: ${esc(f.detail)}` : ""}`,
     residence_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir yaşam yeri kaydını sildi`,
     gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
