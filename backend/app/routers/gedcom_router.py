@@ -144,8 +144,11 @@ def export_gedcom(db: Session = Depends(get_db), _: User = Depends(get_current_u
             lines.append("1 RESI")
             if res.place:
                 lines.append(f"2 PLAC {res.place}")
-            if res.period:
-                lines.append(f"2 DATE {res.period}")
+            span = res.start
+            if res.start or res.end:
+                span = f"{res.start} - {res.end}".strip(" -") if res.end else f"FROM {res.start}"
+            if span:
+                lines.append(f"2 DATE {span}")
             if res.note:
                 lines.append(f"2 NOTE {res.note}")
 

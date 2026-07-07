@@ -162,6 +162,20 @@ label input, label select { color: var(--ink); }
 .health-issue { font-size: 0.85rem; margin-bottom: 0.5rem; }
 .health-issue .chips { margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
 
+/* Yaşadığı yerler — zaman çizelgesi */
+.res-timeline { list-style: none; margin: 0.3rem 0 0; padding: 0; }
+.res-timeline li { position: relative; padding: 0 0 0.9rem 1.4rem; }
+.res-timeline li::before { content: ""; position: absolute; left: 5px; top: 0.55rem; bottom: -0.35rem; width: 2px; background: var(--border); }
+.res-timeline li:last-child::before { display: none; }
+.res-dot { position: absolute; left: 0; top: 0.3rem; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #8a8577; box-sizing: border-box; }
+.res-timeline li.ongoing .res-dot { background: #4a7c59; border-color: #4a7c59; box-shadow: 0 0 0 3px #4a7c5933; }
+.res-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+.res-place { font-weight: 600; }
+.res-range { font-size: 0.8rem; color: var(--muted); }
+.res-timeline li.ongoing .res-range { color: #2f5d3f; font-weight: 600; }
+.res-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.1rem; }
+.res-form { flex-wrap: wrap; }
+
 /* Anekdotlar */
 .anecdotes { display: flex; flex-direction: column; gap: 0.6rem; }
 .anecdote { background: #4a7c590d; border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.8rem; }

@@ -69,6 +69,10 @@ def ensure_schema() -> None:
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS phone VARCHAR(100) NOT NULL DEFAULT ''",
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS email VARCHAR(255) NOT NULL DEFAULT ''",
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS address VARCHAR(500) NOT NULL DEFAULT ''",
+        "ALTER TABLE residences ADD COLUMN IF NOT EXISTS period_start VARCHAR(100) NOT NULL DEFAULT ''",
+        "ALTER TABLE residences ADD COLUMN IF NOT EXISTS period_end VARCHAR(100) NOT NULL DEFAULT ''",
+        # Eski serbest 'period' değerini başlangıç sütununa taşı (yalnız boşsa).
+        "UPDATE residences SET period_start = period WHERE period_start = '' AND period <> ''",
     ]
     with engine.begin() as conn:
         for stmt in alters:

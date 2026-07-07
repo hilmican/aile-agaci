@@ -107,7 +107,8 @@ class AnecdoteOut(BaseModel):
 
 class ResidenceCreate(BaseModel):
     place: str
-    period: str = ""
+    start: str = ""
+    end: str = ""
     note: str = ""
 
 
@@ -116,7 +117,8 @@ class ResidenceOut(BaseModel):
     id: int
     individual_id: int
     place: str = ""
-    period: str = ""
+    start: str = ""
+    end: str = ""
     note: str = ""
     year_from: int | None = None
 

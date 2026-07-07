@@ -83,8 +83,8 @@ class Spouse(Base):
 
 
 class Residence(Base):
-    """Kişinin bir dönem yaşadığı yer: '1998 Ankara', '2001 İstanbul' gibi.
-    year_from sıralama için sayısal; place serbest metin."""
+    """Kişinin yaşadığı yer, zaman aralığıyla. Bitiş boşsa hâlâ orada yaşıyor.
+    year_from sıralama anahtarı; place serbest metin."""
     __tablename__ = "residences"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -92,8 +92,10 @@ class Residence(Base):
         ForeignKey("individuals.id", ondelete="CASCADE"), index=True
     )
     place: Mapped[str] = mapped_column(String(255), default="")
+    start: Mapped[str] = mapped_column("period_start", String(100), default="")
+    end: Mapped[str] = mapped_column("period_end", String(100), default="")
     year_from: Mapped[int | None] = mapped_column(nullable=True)  # sıralama anahtarı
-    period: Mapped[str] = mapped_column(String(100), default="")  # serbest: "1998", "2001–2005"
+    period: Mapped[str] = mapped_column(String(100), default="")  # legacy (backfill için)
     note: Mapped[str] = mapped_column(String(500), default="")
 
 

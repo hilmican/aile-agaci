@@ -262,8 +262,9 @@ function renderDetail(p) {
     <div class="rel-section">
       <h3>Yaşadığı Yerler</h3>
       <div class="residences">${residencesHtml(p)}</div>
-      ${canEdit() ? `<div class="inline-form">
-        <input type="text" id="res-period" placeholder="Dönem (örn. 1998)" style="width:130px" />
+      ${canEdit() ? `<div class="inline-form res-form">
+        <input type="text" id="res-start" placeholder="Başlangıç (örn. 1998)" style="width:130px" />
+        <input type="text" id="res-end" placeholder="Bitiş (boşsa halen)" style="width:130px" />
         <input type="text" id="res-place" placeholder="Yer (örn. Ankara)" />
         <input type="text" id="res-note" placeholder="Not (isteğe bağlı)" />
         <button id="res-add">Ekle</button>
@@ -318,7 +319,12 @@ function renderDetail(p) {
       if (!place) return toast("Yer boş olamaz", true);
       await api(`/api/individuals/${p.id}/residences`, {
         method: "POST",
-        json: { place, period: $("#res-period").value.trim(), note: $("#res-note").value.trim() },
+        json: {
+          place,
+          start: $("#res-start").value.trim(),
+          end: $("#res-end").value.trim(),
+          note: $("#res-note").value.trim(),
+        },
       });
       toast("Yaşam yeri eklendi");
       selectPerson(p.id);
@@ -390,24 +396,49 @@ function renderRelAdders(p) {
 
 const relLabel = (t) => ({ parent: "ebeveyn", spouse: "eş", child: "çocuk" }[t] || t);
 
-// En son (en yeni yıllı) yaşadığı yeri özet alanı olarak göster.
+// Bir kaydın zaman aralığı etiketi. Bitiş yoksa "halen".
+function residenceRange(r) {
+  const s = trDate((r.start || "").trim());
+  const e = trDate((r.end || "").trim());
+  if (s && e) return `${s} – ${e}`;
+  if (s) return `${s} – halen`;
+  if (e) return `– ${e}`;
+  return "";
+}
+
+// Şu an yaşanan (bitişi olmayan) yer varsa onu, yoksa en son kaydı seç.
+function currentResidence(res) {
+  const ongoing = res.filter((r) => !(r.end || "").trim());
+  if (ongoing.length) return ongoing[ongoing.length - 1];
+  return res.length ? res[res.length - 1] : null;
+}
+
 function lastResidenceField(p) {
   const res = p.residences || [];
-  if (!res.length) return "";
-  const last = res[res.length - 1];
-  const val = [last.period, last.place].filter(Boolean).join(" ");
-  return `<div class="field"><span class="k">Son yaşadığı yer</span><div>${esc(val)}</div></div>`;
+  const cur = currentResidence(res);
+  if (!cur) return "";
+  const ongoing = !(cur.end || "").trim();
+  const label = ongoing ? "Şu an yaşadığı yer" : "Son yaşadığı yer";
+  return `<div class="field"><span class="k">${label}</span><div>${esc(cur.place)}</div></div>`;
 }
 
 function residencesHtml(p) {
   const res = p.residences || [];
   if (!res.length) return '<span class="muted">Kayıt yok</span>';
-  return `<ol class="res-timeline">${res.map((r) => {
+  return `<ul class="res-timeline">${res.map((r) => {
+    const ongoing = !(r.end || "").trim();
     const del = canEdit() ? `<button class="small danger" data-res-del="${r.id}">Sil</button>` : "";
-    const per = r.period ? `<span class="res-period">${esc(r.period)}</span>` : "";
-    const note = r.note ? `<span class="res-note">— ${esc(r.note)}</span>` : "";
-    return `<li>${per}<span class="res-place">${esc(r.place)}</span> ${note} ${del}</li>`;
-  }).join("")}</ol>`;
+    const range = residenceRange(r);
+    const note = r.note ? `<div class="res-note">${esc(r.note)}</div>` : "";
+    return `<li class="${ongoing ? "ongoing" : ""}">
+      <span class="res-dot"></span>
+      <div class="res-body">
+        <div class="res-head"><span class="res-place">${esc(r.place)}</span>
+          ${range ? `<span class="res-range">${esc(range)}</span>` : ""} ${del}</div>
+        ${note}
+      </div>
+    </li>`;
+  }).join("")}</ul>`;
 }
 
 function contactSection(p) {

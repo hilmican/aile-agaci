@@ -579,15 +579,19 @@ def add_residence(
     place = payload.place.strip()
     if not place:
         raise HTTPException(status_code=400, detail="Yer boş olamaz")
+    start = payload.start.strip()
+    end = payload.end.strip()
     res = Residence(
         individual_id=ind.id,
         place=place,
-        period=payload.period.strip(),
-        year_from=_year_from_period(payload.period),
+        start=start,
+        end=end,
+        year_from=_year_from_period(start or end),
         note=payload.note.strip(),
     )
     db.add(res)
-    label = f"{res.period + ' ' if res.period else ''}{place}".strip()
+    span = f"{start} – {end or 'halen'}".strip(" –") if (start or end) else ""
+    label = f"{span + ' ' if span else ''}{place}".strip()
     log_activity(db, user, "residence_added", ind, label)
     db.commit()
     db.refresh(res)
