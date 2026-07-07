@@ -650,6 +650,21 @@ function oldestPersonId() {
   return best ? best.id : null;
 }
 
+// Kayıt zenginliği: isimliler önce, sonra dolu alan sayısına göre.
+// Az bilgili / isimsiz kayıtlar listenin en sonuna düşer.
+function personScore(p) {
+  let s = 0;
+  if ((p.first_name || p.last_name || "").trim()) s += 100;  // isimli olmak baskın
+  if ((p.birth_date || "").trim()) s += 3;
+  if ((p.death_date || "").trim()) s += 1;
+  if ((p.birth_place || "").trim()) s += 1;
+  if ((p.death_place || "").trim()) s += 1;
+  if ((p.occupation || "").trim()) s += 1;
+  if ((p.maiden_name || "").trim()) s += 1;
+  if (p.sex === "M" || p.sex === "F") s += 1;
+  return s;
+}
+
 const treeRootLabel = (p) => {
   const y = birthYear(p);
   return fullName(p) + (Number.isFinite(y) ? ` (${y})` : "");
@@ -684,6 +699,8 @@ function renderRootList(q = "") {
     .filter((p) => !needle ||
       (fullName(p) + " " + (p.birth_date || "") + " " + (p.occupation || ""))
         .toLowerCase().includes(needle))
+    .sort((a, b) => personScore(b) - personScore(a) ||
+      fullName(a).localeCompare(fullName(b), "tr"))
     .slice(0, 60);
   list.innerHTML = items
     .map((p) => {
