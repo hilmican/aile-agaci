@@ -12,7 +12,7 @@ from .models import Individual, Spouse, User
 from .routers import auth, gedcom_router, individuals, users
 from .security import hash_password
 
-app = FastAPI(title="Aile Ağacı", version="1.0.0")
+app = FastAPI(title="Baycan Aile Ağacı", version="1.0.0")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
