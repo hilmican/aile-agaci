@@ -184,6 +184,10 @@ async function applyHash() {
     try { await selectPerson(Number(h.get("person"))); } catch (_) {}
     return true;
   }
+  if (tab === "list" && h.get("kind")) {
+    await openListPage(h.get("kind"), h.get("item") || undefined);
+    return true;
+  }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
@@ -653,18 +657,17 @@ function oldestPersonId() {
   return best ? best.id : null;
 }
 
-// Kayıt zenginliği: isimliler önce, sonra dolu alan sayısına göre.
-// Az bilgili / isimsiz kayıtlar listenin en sonuna düşer.
+// Önem sırası: isimliler önce; sonra ağaçtaki bağlantı sayısı (ana soy hattı
+// çok bağlantılı, kayın/uzak dallar az); en son ufak bir "profil doluluğu"
+// eşitlik bozucu. İsimsiz/kopuk kayıtlar en sona düşer.
 function personScore(p) {
   let s = 0;
-  if ((p.first_name || p.last_name || "").trim()) s += 100;  // isimli olmak baskın
-  if ((p.birth_date || "").trim()) s += 3;
+  if ((p.first_name || p.last_name || "").trim()) s += 1_000_000;  // isim baskın
+  s += (p.connections || 0) * 1000;                                // bağlantı asıl ölçüt
+  if ((p.birth_date || "").trim()) s += 3;                          // eşitlik bozucular
   if ((p.death_date || "").trim()) s += 1;
   if ((p.birth_place || "").trim()) s += 1;
-  if ((p.death_place || "").trim()) s += 1;
   if ((p.occupation || "").trim()) s += 1;
-  if ((p.maiden_name || "").trim()) s += 1;
-  if (p.sex === "M" || p.sex === "F") s += 1;
   return s;
 }
 
@@ -1357,7 +1360,7 @@ $("#tab-home").addEventListener("click", (e) => {
   if (nav) {
     const target = nav.dataset.nav;
     if (target === "people") { switchTab("people"); updateHash({ tab: "people" }); }
-    else if (target.startsWith("list:")) openDashList(target.slice(5));
+    else if (target.startsWith("list:")) openListPage(target.slice(5));
     return;
   }
   const el = e.target.closest("[data-person]");
@@ -1367,63 +1370,50 @@ $("#tab-home").addEventListener("click", (e) => {
   selectPerson(Number(el.dataset.person));
 });
 
-/* ---- Dashboard liste modalı (evlilikler / anekdotlar / fotoğraflar) ---- */
-function ensureModal() {
-  let m = $("#list-modal");
-  if (m) return m;
-  m = document.createElement("div");
-  m.id = "list-modal";
-  m.className = "modal-backdrop hidden";
-  m.innerHTML = `<div class="modal">
-    <div class="modal-head"><h2 id="modal-title"></h2>
-      <button id="modal-close" class="ghost" title="Kapat">✕</button></div>
-    <div id="modal-body" class="modal-body"></div>
-  </div>`;
-  document.body.appendChild(m);
-  const close = () => m.classList.add("hidden");
-  m.addEventListener("click", (e) => { if (e.target === m) close(); });
-  $("#modal-close").addEventListener("click", close);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !m.classList.contains("hidden")) close();
-  });
-  // Modal içi kişi bağlantıları
-  $("#modal-body").addEventListener("click", (e) => {
-    const el = e.target.closest("[data-person]");
-    if (!el) return;
-    close();
-    switchTab("people");
-    selectPerson(Number(el.dataset.person));
-  });
-  return m;
-}
-
-async function openDashList(kind) {
-  const m = ensureModal();
-  $("#modal-title").textContent = "Yükleniyor…";
-  $("#modal-body").innerHTML = "";
-  m.classList.remove("hidden");
+/* ---- Liste sayfaları (evlilikler / anekdotlar / fotoğraflar) ---- */
+async function openListPage(kind, item) {
+  updateHash(item ? { tab: "list", kind, item } : { tab: "list", kind });
+  switchTab("list");
+  $("#list-title").textContent = "Yükleniyor…";
+  $("#list-content").innerHTML = "";
   let d;
   try { d = await api(`/api/dashboard/list/${kind}`); }
-  catch (_) { $("#modal-body").innerHTML = '<p class="error">Liste yüklenemedi.</p>'; return; }
-  $("#modal-title").textContent = `${d.title} (${d.items.length})`;
-  $("#modal-body").innerHTML = renderDashList(kind, d.items);
+  catch (_) { $("#list-content").innerHTML = '<p class="error">Liste yüklenemedi.</p>'; return; }
+  $("#list-title").textContent = `${d.title} (${d.items.length})`;
+  $("#list-content").innerHTML = renderList(kind, d.items, item);
+  if (item) {
+    const el = document.getElementById(`item-${item}`);
+    if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("flash"); }
+  }
 }
 
-function renderDashList(kind, items) {
+function shareBtn(url) {
+  return `<button class="small ghost share-btn" data-share="${esc(url)}" title="Bağlantıyı kopyala">🔗 Paylaş</button>`;
+}
+
+function renderList(kind, items, highlight) {
   if (!items.length) return '<p class="muted">Kayıt yok.</p>';
   if (kind === "marriages") {
-    return `<ul class="modal-list">${items.map((it) => {
+    return `<ul class="page-list">${items.map((it) => {
       const info = [it.date && trDate(it.date), it.place].filter(Boolean).join(" · ");
       return `<li>💍 ${it.a ? personLink(it.a) : "?"} — ${it.b ? personLink(it.b) : "?"}
         ${info ? `<span class="muted">(${esc(info)})</span>` : ""}</li>`;
     }).join("")}</ul>`;
   }
   if (kind === "anecdotes") {
-    return `<ul class="modal-list">${items.map((it) => `<li>
-      <div>${it.title ? `<b>${esc(it.title)}</b> — ` : ""}${it.person ? personLink(it.person) : ""}</div>
-      <div class="anec-text">${esc(it.text)}</div>
-      <div class="muted" style="font-size:0.72rem">${esc(it.author || "")}${it.at ? " · " + fmtAgo(it.at) : ""}</div>
-    </li>`).join("")}</ul>`;
+    return `<ul class="page-list">${items.map((it) => {
+      const url = `${location.origin}${location.pathname}#tab=list&kind=anecdotes&item=${it.id}`;
+      const hot = String(it.id) === String(highlight) ? " flash" : "";
+      return `<li id="item-${it.id}" class="anec-item${hot}">
+        <div class="anec-item-head">
+          ${it.title ? `<b>${esc(it.title)}</b>` : `<b class="muted">Anekdot</b>`}
+          ${it.person ? `— ${personLink(it.person)}` : ""}
+          ${shareBtn(url)}
+        </div>
+        <div class="anec-text">${esc(it.text)}</div>
+        <div class="muted anec-by">${esc(it.author || "")}${it.at ? " · " + fmtAgo(it.at) : ""}</div>
+      </li>`;
+    }).join("")}</ul>`;
   }
   if (kind === "photos") {
     return `<div class="photo-grid">${items.map((it) => `<a class="photo-cell" data-person="${it.id}" href="#tab=people&person=${it.id}">
@@ -1432,6 +1422,25 @@ function renderDashList(kind, items) {
   }
   return "";
 }
+
+// Liste sayfası içi: kişi bağlantıları + paylaş butonu
+$("#tab-list").addEventListener("click", async (e) => {
+  const share = e.target.closest("[data-share]");
+  if (share) {
+    try {
+      await navigator.clipboard.writeText(share.dataset.share);
+      toast("Bağlantı kopyalandı");
+    } catch (_) {
+      window.prompt("Bağlantıyı kopyalayın:", share.dataset.share);
+    }
+    return;
+  }
+  const el = e.target.closest("[data-person]");
+  if (!el) return;
+  e.preventDefault();
+  switchTab("people");
+  selectPerson(Number(el.dataset.person));
+});
 
 /* ---------------- Build footer ---------------- */
 fetch("/api/version")

@@ -100,7 +100,23 @@ def list_individuals(
             or_(Individual.first_name.ilike(like), Individual.last_name.ilike(like))
         )
     stmt = stmt.order_by(Individual.last_name, Individual.first_name).limit(500)
-    return db.scalars(stmt).all()
+    people = db.scalars(stmt).all()
+
+    # Her kişinin ağaçtaki bağlantı sayısı (ebeveyn+çocuk+eş) — sıralama/önem için.
+    deg: dict[int, int] = {}
+    for pid, cid in db.execute(select(ParentChild.parent_id, ParentChild.child_id)).all():
+        deg[pid] = deg.get(pid, 0) + 1
+        deg[cid] = deg.get(cid, 0) + 1
+    for aid, bid in db.execute(select(Spouse.a_id, Spouse.b_id)).all():
+        deg[aid] = deg.get(aid, 0) + 1
+        deg[bid] = deg.get(bid, 0) + 1
+
+    out = []
+    for p in people:
+        summary = IndividualSummary.model_validate(p)
+        summary.connections = deg.get(p.id, 0)
+        out.append(summary)
+    return out
 
 
 @router.post("", response_model=IndividualDetail, status_code=201)

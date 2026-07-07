@@ -82,6 +82,7 @@ class MediaOut(BaseModel):
 class IndividualSummary(IndividualBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    connections: int = 0  # ağaçtaki bağlantı sayısı (ebeveyn+çocuk+eş)
 
 
 class SpouseUpdate(BaseModel):

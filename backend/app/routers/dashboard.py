@@ -216,6 +216,7 @@ def dashboard_list(kind: str, db: Session = Depends(get_db), _: User = Depends(g
             select(Anecdote).order_by(Anecdote.created_at.desc(), Anecdote.id.desc())
         ).all()
         items = [{
+            "id": a.id,
             "person": _person_ref(db.get(Individual, a.individual_id)) if a.individual_id else None,
             "title": a.title,
             "text": a.text,

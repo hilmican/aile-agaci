@@ -152,16 +152,19 @@ label input, label select { color: var(--ink); }
 .stat-card.clickable { cursor: pointer; transition: border-color 0.12s, transform 0.12s; }
 .stat-card.clickable:hover { border-color: #4a7c59; transform: translateY(-2px); }
 
-/* Liste modalı */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 80; padding: 1rem; }
-.modal-backdrop.hidden { display: none; }
-.modal { background: var(--panel); border-radius: 12px; width: min(680px, 100%); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
-.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border); }
-.modal-head h2 { font-size: 1.05rem; margin: 0; }
-.modal-body { overflow-y: auto; padding: 0.8rem 1.1rem; }
-.modal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
-.modal-list li { padding-bottom: 0.6rem; border-bottom: 1px solid var(--border); }
-.modal-list li:last-child { border-bottom: none; }
+/* Liste sayfası (evlilikler / anekdotlar / fotoğraflar) */
+.list-page { max-width: 780px; margin: 0 auto; }
+.list-page-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1rem; }
+.list-page-head h1 { font-size: 1.3rem; margin: 0; }
+.back-link { color: #4a7c59; text-decoration: none; font-size: 0.9rem; }
+.back-link:hover { text-decoration: underline; }
+.page-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.page-list li { padding: 0.7rem 0.9rem; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.anec-item-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.3rem; }
+.anec-item-head .share-btn { margin-left: auto; }
+.anec-by { font-size: 0.72rem; margin-top: 0.3rem; }
+@keyframes flashHighlight { 0% { background: #4a7c5940; } 100% { background: var(--panel); } }
+.flash { animation: flashHighlight 1.8s ease-out; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 0.7rem; }
 .photo-cell { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; text-decoration: none; color: inherit; font-size: 0.75rem; text-align: center; }
 .photo-cell img, .photo-cell .ph { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); }
