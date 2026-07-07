@@ -78,6 +78,46 @@ class Spouse(Base):
     marriage_place: Mapped[str] = mapped_column(String(255), default="")
 
 
+class Anecdote(Base):
+    """Kişiye bağlı, yazarlı ve tarihli kısa hikâye/anı."""
+    __tablename__ = "anecdotes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    individual_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    author_name: Mapped[str] = mapped_column(String(255), default="")
+    title: Mapped[str] = mapped_column(String(255), default="")
+    text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActivityLog(Base):
+    """Anasayfa haber akışı: kim, ne yaptı, kimin üzerinde."""
+    __tablename__ = "activity_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    user_name: Mapped[str] = mapped_column(String(255), default="")
+    # action: person_created | person_updated | person_deleted | relationship_added
+    # | relationship_removed | media_added | media_deleted | anecdote_added
+    # | anecdote_deleted | gedcom_imported
+    action: Mapped[str] = mapped_column(String(40))
+    individual_id: Mapped[int | None] = mapped_column(
+        ForeignKey("individuals.id", ondelete="SET NULL"), nullable=True
+    )
+    individual_name: Mapped[str] = mapped_column(String(255), default="")
+    detail: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class Media(Base):
     __tablename__ = "media"
 

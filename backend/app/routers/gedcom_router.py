@@ -3,6 +3,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..activity import log_activity
 from ..database import get_db
 from ..gedcom import parse_gedcom
 from ..models import Individual, ParentChild, Spouse, User
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/gedcom", tags=["gedcom"])
 async def import_gedcom(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     raw = await file.read()
     try:
@@ -79,6 +80,8 @@ async def import_gedcom(
                     db.add(ParentChild(parent_id=parent_id, child_id=child_id))
                     pc_count += 1
 
+    log_activity(db, user, "gedcom_imported",
+                 detail=f"{len(xref_to_id)} kişi, {pc_count} ebeveyn-çocuk bağı, {spouse_count} evlilik")
     db.commit()
     return ImportResult(
         individuals=len(xref_to_id),

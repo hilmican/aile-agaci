@@ -141,6 +141,35 @@ label input, label select { color: var(--ink); }
 .combo-item:hover { background: #4a7c5915; }
 .combo-empty { padding: 0.4rem 0.6rem; color: var(--muted); font-size: 0.85rem; }
 .build-footer { position: fixed; bottom: 6px; right: 12px; font-size: 0.7rem; color: var(--muted); opacity: 0.75; pointer-events: none; z-index: 60; }
+
+/* Anasayfa (dashboard) */
+.dash { display: flex; flex-direction: column; gap: 1rem; }
+.dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.7rem; }
+.stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem 1rem; text-align: center; }
+.stat-card .v { font-size: 1.5rem; font-weight: 700; color: #2f5d3f; }
+.stat-card .l { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+.stat-card.wide .v { font-size: 1.05rem; }
+.dash-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; align-items: start; }
+.dash-card h2 { font-size: 1rem; margin-bottom: 0.6rem; }
+.dash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.88rem; }
+.dash-list li { line-height: 1.45; }
+.dash-list .ago { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+.plink { color: #2f5d3f; font-weight: 600; text-decoration: none; }
+.plink:hover { text-decoration: underline; }
+.health-bar { position: relative; background: #00000012; border-radius: 8px; height: 22px; overflow: hidden; margin-bottom: 0.7rem; }
+.health-bar .fill { position: absolute; inset: 0 auto 0 0; background: #4a7c59; border-radius: 8px; }
+.health-bar span { position: relative; display: block; text-align: center; font-size: 0.75rem; line-height: 22px; color: #fff; mix-blend-mode: difference; }
+.health-issue { font-size: 0.85rem; margin-bottom: 0.5rem; }
+.health-issue .chips { margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+/* Anekdotlar */
+.anecdotes { display: flex; flex-direction: column; gap: 0.6rem; }
+.anecdote { background: #4a7c590d; border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.8rem; }
+.anec-title { font-weight: 600; margin-bottom: 0.2rem; }
+.anec-text { font-size: 0.9rem; white-space: pre-wrap; }
+.anec-meta { margin-top: 0.35rem; font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; }
+.anec-form { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.6rem; max-width: 560px; }
+.anec-form button { align-self: flex-start; }
 .node-card rect { fill: #fff; stroke: #b3ada1; stroke-width: 1.5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.22)); }
 .node-card.M rect { fill: #d9ecf9; stroke: #5b9bd1; }
 .node-card.F rect { fill: #fbe0e6; stroke: #dd8ba1; }

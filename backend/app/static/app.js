@@ -129,7 +129,11 @@ async function boot() {
 
   await loadPeople();
   if (isAdmin()) loadUsers();
-  await applyHash(); // paylaşılan URL varsa o görünümü aç
+  const applied = await applyHash(); // paylaşılan URL varsa o görünümü aç
+  if (!applied) {
+    switchTab("home");
+    loadDashboard();
+  }
 }
 
 const roleLabel = (r) => ({ admin: "Yönetici", editor: "Düzenleyici", viewer: "Görüntüleyici" }[r] || r);
@@ -147,6 +151,7 @@ $$(".tab").forEach((btn) => {
     switchTab(tab);
     updateHash({ tab });
     if (tab === "tree") populateTreeRoots();
+    if (tab === "home") loadDashboard();
   });
 });
 
@@ -179,9 +184,10 @@ async function applyHash() {
     try { await selectPerson(Number(h.get("person"))); } catch (_) {}
     return true;
   }
-  if (["people", "tree", "import", "users"].includes(tab)) {
+  if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
+    if (tab === "home") loadDashboard();
     return true;
   }
   return false;
@@ -259,6 +265,16 @@ function renderDetail(p) {
         <button id="media-upload">Görsel Ekle</button>
       </div>` : ""}
     </div>
+
+    <div class="rel-section">
+      <h3>Anekdotlar</h3>
+      <div class="anecdotes">${(p.anecdotes || []).map(anecdoteHtml).join("") || '<span class="muted">Henüz anekdot yok</span>'}</div>
+      ${canEdit() ? `<div class="anec-form">
+        <input type="text" id="anec-title" placeholder="Başlık (isteğe bağlı)" />
+        <textarea id="anec-text" rows="3" placeholder="Bu kişiyle ilgili bir anı, hikâye yazın…"></textarea>
+        <button id="anec-add">Anekdot Ekle</button>
+      </div>` : ""}
+    </div>
   `;
 
   $("#show-tree-btn").addEventListener("click", () => showInTree(p.id));
@@ -266,6 +282,23 @@ function renderDetail(p) {
     $("#edit-btn").addEventListener("click", () => renderEditForm(p));
     $("#del-btn").addEventListener("click", () => deletePerson(p.id));
     $("#media-upload").addEventListener("click", () => uploadMedia(p.id));
+    $("#anec-add").addEventListener("click", async () => {
+      const text = $("#anec-text").value.trim();
+      if (!text) return toast("Anekdot metni boş olamaz", true);
+      await api(`/api/individuals/${p.id}/anecdotes`, {
+        method: "POST",
+        json: { title: $("#anec-title").value.trim(), text },
+      });
+      toast("Anekdot eklendi");
+      selectPerson(p.id);
+    });
+    $$("[data-anec-del]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Anekdot silinsin mi?")) return;
+        await api(`/api/individuals/${p.id}/anecdotes/${btn.dataset.anecDel}`, { method: "DELETE" });
+        toast("Anekdot silindi");
+        selectPerson(p.id);
+      }));
     $$("[data-rel]").forEach((chip) => {
       chip.querySelector(".x")?.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -325,6 +358,19 @@ function renderRelAdders(p) {
 }
 
 const relLabel = (t) => ({ parent: "ebeveyn", spouse: "eş", child: "çocuk" }[t] || t);
+
+function anecdoteHtml(a) {
+  const del = canEdit() ? `<button class="small danger" data-anec-del="${a.id}">Sil</button>` : "";
+  const when = a.created_at
+    ? new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" })
+        .format(new Date(a.created_at))
+    : "";
+  return `<div class="anecdote">
+    ${a.title ? `<div class="anec-title">${esc(a.title)}</div>` : ""}
+    <div class="anec-text">${esc(a.text)}</div>
+    <div class="anec-meta">${esc(a.author_name || "")}${when ? ` · ${esc(when)}` : ""} ${del}</div>
+  </div>`;
+}
 
 function mediaHtml(m) {
   const del = canEdit() ? `<span class="del" data-media="${m.id}">✕</span>` : "";
@@ -1050,6 +1096,103 @@ $("#export-btn").addEventListener("click", async () => {
 /* ---------------- Global error surfacing ---------------- */
 window.addEventListener("unhandledrejection", (e) => {
   if (e.reason && e.reason.message) toast(e.reason.message, true);
+});
+
+/* ---------------- Anasayfa (dashboard) ---------------- */
+const TR_DATE_FMT = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" });
+const TR_FULL_FMT = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+
+function fmtAgo(iso) {
+  if (!iso) return "";
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 90) return "az önce";
+  if (diff < 3600) return `${Math.round(diff / 60)} dk önce`;
+  if (diff < 86400) return `${Math.round(diff / 3600)} saat önce`;
+  if (diff < 86400 * 7) return `${Math.round(diff / 86400)} gün önce`;
+  return TR_FULL_FMT.format(new Date(iso));
+}
+
+const personLink = (p) =>
+  `<a href="#tab=people&person=${p.id}" class="plink" data-person="${p.id}">${esc(p.name)}</a>`;
+
+async function loadDashboard() {
+  const d = await api("/api/dashboard");
+
+  // İstatistik kartları
+  const s = d.stats;
+  const cards = [
+    [s.total, "Kişi"],
+    [`${s.females} / ${s.males}`, "Kadın / Erkek"],
+    [s.marriages, "Evlilik"],
+    [s.generations, "Nesil"],
+    [s.with_photo, "Fotoğraflı kişi"],
+    [s.anecdotes, "Anekdot"],
+  ];
+  $("#dash-stats").innerHTML = cards
+    .map(([v, l]) => `<div class="stat-card"><div class="v">${esc(String(v))}</div><div class="l">${esc(l)}</div></div>`)
+    .join("") + (s.oldest
+      ? `<div class="stat-card wide"><div class="v">${personLink(s.oldest.person)}</div>
+         <div class="l">En eski kişi · ${esc(String(s.oldest.year))}</div></div>` : "");
+
+  // Yaklaşan günler
+  const when = (u) => u.days_left === 0 ? "bugün" : u.days_left === 1 ? "yarın"
+    : `${u.days_left} gün sonra`;
+  $("#dash-upcoming").innerHTML = d.upcoming.map((u) => {
+    const dt = TR_DATE_FMT.format(new Date(u.date + "T00:00:00"));
+    if (u.type === "birthday") {
+      const age = u.age ? `, ${u.age} yaşına girecek` : "";
+      return `<li>🎂 ${personLink(u.person)} — ${esc(dt)} (${when(u)})${esc(age)}</li>`;
+    }
+    const years = u.age ? `vefatının ${u.age}. yılı` : "vefat yıldönümü";
+    return `<li>🕯 ${personLink(u.person)} — ${esc(years)} (${esc(dt)})</li>`;
+  }).join("") || '<li class="muted">Önümüzdeki 30 günde kayıtlı bir gün yok.</li>';
+
+  // Haber akışı
+  const FEED_TR = {
+    person_created: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini ekledi`,
+    person_updated: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> bilgilerini güncelledi`,
+    person_deleted: (f) => `${esc(f.user)}, <b>${esc(f.individual)}</b> kişisini sildi`,
+    relationship_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için ilişki ekledi${f.detail ? ` (${esc(f.detail)})` : ""}`,
+    relationship_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir ilişkiyi kaldırdı`,
+    media_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için fotoğraf ekledi`,
+    media_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir görseli sildi`,
+    anecdote_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> hakkında bir anekdot ekledi${f.detail ? `: “${esc(f.detail)}”` : ""}`,
+    anecdote_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir anekdotu sildi`,
+    gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
+  };
+  function nameOrLink(f) {
+    return f.individual_id
+      ? personLink({ id: f.individual_id, name: f.individual })
+      : esc(f.individual);
+  }
+  $("#dash-feed").innerHTML = d.feed.map((f) => {
+    const line = (FEED_TR[f.action] || ((x) => `${esc(x.user)} · ${esc(x.action)}`))(f);
+    return `<li>${line} <span class="ago">${esc(fmtAgo(f.at))}</span></li>`;
+  }).join("") || '<li class="muted">Henüz bir hareket yok — ilk haberi sen oluştur!</li>';
+
+  // Veri sağlığı
+  const h = d.health;
+  const issues = h.issues.filter((i) => i.count > 0);
+  $("#dash-health").innerHTML = `
+    <div class="health-bar" title="Ad, doğum tarihi ve cinsiyet alanlarının doluluk oranı">
+      <div class="fill" style="width:${h.completeness}%"></div>
+      <span>%${h.completeness} tamam</span>
+    </div>
+    ${issues.map((i) => `<div class="health-issue">
+       <b>${i.count}</b> ${esc(i.label.toLowerCase())}
+       ${i.people.length ? `<div class="chips">${i.people.map((p) =>
+         `<span class="chip" data-person="${p.id}">${esc(p.name)}</span>`).join("")}
+         ${i.count > i.people.length ? `<span class="muted">+${i.count - i.people.length} kişi daha</span>` : ""}</div>` : ""}
+     </div>`).join("") || '<p class="muted">Harika — belirgin bir eksik yok! 🎉</p>'}`;
+}
+
+// Dashboard içindeki kişi bağlantıları
+$("#tab-home").addEventListener("click", (e) => {
+  const el = e.target.closest("[data-person]");
+  if (!el) return;
+  e.preventDefault();
+  switchTab("people");
+  selectPerson(Number(el.dataset.person));
 });
 
 /* ---------------- Build footer ---------------- */

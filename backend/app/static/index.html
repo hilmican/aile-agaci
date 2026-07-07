@@ -25,7 +25,8 @@
     <header class="topbar">
       <div class="brand">🌳 Baycan Aile Ağacı</div>
       <nav class="tabs">
-        <button class="tab active" data-tab="people">Kişiler</button>
+        <button class="tab active" data-tab="home">Anasayfa</button>
+        <button class="tab" data-tab="people">Kişiler</button>
         <button class="tab" data-tab="tree">Ağaç</button>
         <button class="tab" data-tab="import">İçe Aktar</button>
         <button class="tab admin-only hidden" data-tab="users">Kullanıcılar</button>
@@ -37,8 +38,29 @@
       </div>
     </header>
 
+    <!-- Home tab (dashboard) -->
+    <section id="tab-home" class="tab-panel">
+      <div class="dash">
+        <div id="dash-stats" class="dash-stats"></div>
+        <div class="dash-cols">
+          <div class="card dash-card">
+            <h2>📅 Yaklaşan Günler</h2>
+            <ul id="dash-upcoming" class="dash-list"></ul>
+          </div>
+          <div class="card dash-card">
+            <h2>📰 Son Haberler</h2>
+            <ul id="dash-feed" class="dash-list"></ul>
+          </div>
+          <div class="card dash-card">
+            <h2>🧩 Neler Tamamlanmalı?</h2>
+            <div id="dash-health"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- People tab -->
-    <section id="tab-people" class="tab-panel">
+    <section id="tab-people" class="tab-panel hidden">
       <div class="people-layout">
         <aside class="sidebar">
           <div class="sidebar-head">

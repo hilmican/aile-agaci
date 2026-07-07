@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from ..activity import log_activity
 from ..config import settings
 from ..database import get_db
-from ..models import Individual, Media, ParentChild, Spouse
+from ..models import Anecdote, Individual, Media, ParentChild, Spouse
 from ..schemas import (
+    AnecdoteCreate,
+    AnecdoteOut,
     IndividualCreate,
     IndividualDetail,
     IndividualSummary,
@@ -66,6 +69,13 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
     detail.children = [IndividualSummary.model_validate(c) for c in _children(db, ind.id)]
     detail.spouses = _spouse_links(db, ind.id)
     detail.media = [_media_out(m) for m in ind.media]
+    detail.anecdotes = [
+        AnecdoteOut.model_validate(a)
+        for a in db.scalars(
+            select(Anecdote).where(Anecdote.individual_id == ind.id)
+            .order_by(Anecdote.created_at.desc())
+        ).all()
+    ]
     return detail
 
 
@@ -87,10 +97,12 @@ def list_individuals(
 
 @router.post("", response_model=IndividualDetail, status_code=201)
 def create_individual(
-    payload: IndividualCreate, db: Session = Depends(get_db), _: User = Depends(require_editor)
+    payload: IndividualCreate, db: Session = Depends(get_db), user: User = Depends(require_editor)
 ):
     ind = Individual(**payload.model_dump())
     db.add(ind)
+    db.flush()
+    log_activity(db, user, "person_created", ind)
     db.commit()
     db.refresh(ind)
     return _detail(db, ind)
@@ -147,25 +159,27 @@ def update_individual(
     ind_id: int,
     payload: IndividualUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     ind = db.get(Individual, ind_id)
     if ind is None:
         raise HTTPException(status_code=404, detail="Kişi bulunamadı")
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(ind, key, value)
+    log_activity(db, user, "person_updated", ind)
     db.commit()
     db.refresh(ind)
     return _detail(db, ind)
 
 
 @router.delete("/{ind_id}", status_code=204)
-def delete_individual(ind_id: int, db: Session = Depends(get_db), _: User = Depends(require_editor)):
+def delete_individual(ind_id: int, db: Session = Depends(get_db), user: User = Depends(require_editor)):
     ind = db.get(Individual, ind_id)
     if ind is None:
         raise HTTPException(status_code=404, detail="Kişi bulunamadı")
     for m in ind.media:
         _remove_file(m.filename)
+    log_activity(db, user, "person_deleted", ind)
     db.delete(ind)
     db.commit()
 
@@ -176,7 +190,7 @@ def add_relationship(
     ind_id: int,
     payload: RelationshipCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     ind = db.get(Individual, ind_id)
     other = db.get(Individual, payload.related_id)
@@ -203,6 +217,9 @@ def add_relationship(
             )
     else:
         raise HTTPException(status_code=400, detail="Geçersiz ilişki türü")
+    rel_tr = {"parent": "ebeveyn", "child": "çocuk", "spouse": "eş"}[payload.type]
+    other_name = f"{other.first_name} {other.last_name}".strip() or "(isimsiz)"
+    log_activity(db, user, "relationship_added", ind, f"{rel_tr}: {other_name}")
     db.commit()
     return {"status": "ok"}
 
@@ -213,7 +230,7 @@ def remove_relationship(
     type: str,
     related_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     if type == "parent":
         _unlink_parent_child(db, parent_id=related_id, child_id=ind_id)
@@ -226,6 +243,9 @@ def remove_relationship(
             db.delete(row)
     else:
         raise HTTPException(status_code=400, detail="Geçersiz ilişki türü")
+    ind = db.get(Individual, ind_id)
+    if ind is not None:
+        log_activity(db, user, "relationship_removed", ind)
     db.commit()
 
 
@@ -437,7 +457,7 @@ async def upload_media(
     file: UploadFile = File(...),
     caption: str = Form(""),
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     ind = db.get(Individual, ind_id)
     if ind is None:
@@ -463,6 +483,7 @@ async def upload_media(
         caption=caption,
     )
     db.add(media)
+    log_activity(db, user, "media_added", ind)
     db.commit()
     db.refresh(media)
     return _media_out(media)
@@ -473,11 +494,60 @@ def delete_media(
     ind_id: int,
     media_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    user: User = Depends(require_editor),
 ):
     media = db.get(Media, media_id)
     if media is None or media.individual_id != ind_id:
         raise HTTPException(status_code=404, detail="Görsel bulunamadı")
     _remove_file(media.filename)
     db.delete(media)
+    ind = db.get(Individual, ind_id)
+    if ind is not None:
+        log_activity(db, user, "media_deleted", ind)
+    db.commit()
+
+
+# ---- Anekdotlar ----
+@router.post("/{ind_id}/anecdotes", response_model=AnecdoteOut, status_code=201)
+def add_anecdote(
+    ind_id: int,
+    payload: AnecdoteCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    ind = db.get(Individual, ind_id)
+    if ind is None:
+        raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Anekdot metni boş olamaz")
+    an = Anecdote(
+        individual_id=ind.id,
+        author_id=user.id,
+        author_name=user.full_name or user.email,
+        title=payload.title.strip(),
+        text=text,
+    )
+    db.add(an)
+    snippet = an.title or (text[:80] + ("…" if len(text) > 80 else ""))
+    log_activity(db, user, "anecdote_added", ind, snippet)
+    db.commit()
+    db.refresh(an)
+    return AnecdoteOut.model_validate(an)
+
+
+@router.delete("/{ind_id}/anecdotes/{anecdote_id}", status_code=204)
+def delete_anecdote(
+    ind_id: int,
+    anecdote_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    an = db.get(Anecdote, anecdote_id)
+    if an is None or an.individual_id != ind_id:
+        raise HTTPException(status_code=404, detail="Anekdot bulunamadı")
+    db.delete(an)
+    ind = db.get(Individual, ind_id)
+    if ind is not None:
+        log_activity(db, user, "anecdote_deleted", ind)
     db.commit()
