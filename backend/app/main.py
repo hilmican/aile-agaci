@@ -1,7 +1,7 @@
 import os
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -105,7 +105,12 @@ app.mount("/uploads", StaticFiles(directory=settings.upload_dir, check_dir=False
 # Frontend (SPA) — mounted last so API routes take precedence.
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    # index.html'i her istekte taze döndür ve statik varlık URL'lerine build
+    # numarasını göm (cache-busting). Böylece yeni deploy'da tarayıcı/CDN eski
+    # app.js / style.css'i sunmaz — güncel index eski JS ile eşleşmez sorunu biter.
+    with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as f:
+        html = f.read().replace("__BUILD__", BUILD_ID)
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
