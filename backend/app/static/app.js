@@ -47,11 +47,31 @@ const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, (c) =>
 
 const fullName = (p) => `${p.first_name || ""} ${p.last_name || ""}`.trim() || "(isimsiz)";
 
+// GEDCOM tarihlerini Türkçeleştir: "12 MAR 1940" -> "12 Mar 1940",
+// "ABT 1950" -> "yakl. 1950". Ham değer saklıdır; yalnız gösterim çevrilir.
+const TR_MONTHS = {
+  JAN: "Oca", FEB: "Şub", MAR: "Mar", APR: "Nis", MAY: "May", JUN: "Haz",
+  JUL: "Tem", AUG: "Ağu", SEP: "Eyl", OCT: "Eki", NOV: "Kas", DEC: "Ara",
+};
+const TR_QUAL = {
+  ABT: "yakl.", EST: "tah.", CAL: "hes.", BEF: "önce", AFT: "sonra",
+  FROM: "", TO: "–", BET: "", AND: "–", INT: "",
+};
+function trDate(s) {
+  if (!s) return "";
+  return String(s).replace(/[A-Za-zÇĞİÖŞÜçğıöşü]+/g, (w) => {
+    const u = w.toUpperCase();
+    if (TR_MONTHS[u]) return TR_MONTHS[u];
+    if (u in TR_QUAL) return TR_QUAL[u];
+    return w;
+  }).replace(/\s+/g, " ").trim();
+}
+
 // Liste/arama sonuçlarında ikinci satır: "12 MAR 1940 – 2 MAR 1980 · Çiftçi"
 function personSub(p) {
   const bits = [];
-  const b = (p.birth_date || "").trim();
-  const d = (p.death_date || "").trim();
+  const b = trDate((p.birth_date || "").trim());
+  const d = trDate((p.death_date || "").trim());
   if (b && d) bits.push(`${b} – ${d}`);
   else if (b) bits.push(`d. ${b}`);
   else if (d) bits.push(`ö. ${d}`);
@@ -219,8 +239,8 @@ function renderDetail(p) {
     <div class="detail-actions">${editBtns}</div>
     <h2><span class="sex-dot ${esc(p.sex)}"></span> ${esc(fullName(p))}</h2>
     <div class="detail-grid">
-      ${field("Doğum", p.birth_date, p.birth_place)}
-      ${field("Ölüm", p.death_date, p.death_place)}
+      ${field("Doğum", trDate(p.birth_date), p.birth_place)}
+      ${field("Ölüm", trDate(p.death_date), p.death_place)}
       ${field("Kızlık soyadı", p.maiden_name)}
       ${field("Meslek", p.occupation)}
     </div>
@@ -641,8 +661,8 @@ function initials(name) {
 }
 
 function datesLabel(d) {
-  const b = (d.birth_date || "").trim();
-  const de = (d.death_date || "").trim();
+  const b = trDate((d.birth_date || "").trim());
+  const de = trDate((d.death_date || "").trim());
   if (!b && !de) return "";
   return `${b || "?"} – ${de || ""}`.trim();
 }
@@ -1035,7 +1055,7 @@ window.addEventListener("unhandledrejection", (e) => {
 /* ---------------- Build footer ---------------- */
 fetch("/api/version")
   .then((r) => r.json())
-  .then((v) => { $("#build-footer").textContent = `v${v.version} · build ${v.build}`; })
+  .then((v) => { $("#build-footer").textContent = `Sürüm ${v.version} · Yapı ${v.build}`; })
   .catch(() => {});
 
 /* ---------------- Start ---------------- */
