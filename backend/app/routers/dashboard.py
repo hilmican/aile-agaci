@@ -188,3 +188,52 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         "health": health,
         "feed": feed,
     }
+
+
+@router.get("/list/{kind}")
+def dashboard_list(kind: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Dashboard kutularının detay listeleri: marriages | anecdotes | photos."""
+    if kind == "marriages":
+        items = []
+        for sp in db.scalars(select(Spouse)).all():
+            a = db.get(Individual, sp.a_id)
+            b = db.get(Individual, sp.b_id)
+            _, _, year = _parse_day_month_year(sp.marriage_date)
+            items.append({
+                "a": _person_ref(a) if a else None,
+                "b": _person_ref(b) if b else None,
+                "date": sp.marriage_date,
+                "place": sp.marriage_place,
+                "_year": year or 9999,
+            })
+        items.sort(key=lambda x: x["_year"])
+        for x in items:
+            x.pop("_year", None)
+        return {"kind": kind, "title": "Evlilikler", "items": items}
+
+    if kind == "anecdotes":
+        rows = db.scalars(
+            select(Anecdote).order_by(Anecdote.created_at.desc(), Anecdote.id.desc())
+        ).all()
+        items = [{
+            "person": _person_ref(db.get(Individual, a.individual_id)) if a.individual_id else None,
+            "title": a.title,
+            "text": a.text,
+            "author": a.author_name,
+            "at": a.created_at.isoformat() if a.created_at else None,
+        } for a in rows]
+        return {"kind": kind, "title": "Anekdotlar", "items": items}
+
+    if kind == "photos":
+        photo_ids = db.scalars(select(Media.individual_id).distinct()).all()
+        people = db.scalars(select(Individual).where(Individual.id.in_(photo_ids))).all() if photo_ids else []
+        people = sorted(people, key=lambda p: (p.last_name, p.first_name))
+        items = []
+        for p in people:
+            first = p.media[0].filename if p.media else None
+            ref = _person_ref(p)
+            ref["photo"] = f"/uploads/{first}" if first else None
+            items.append(ref)
+        return {"kind": kind, "title": "Fotoğraflı Kişiler", "items": items}
+
+    return {"kind": kind, "title": "", "items": []}

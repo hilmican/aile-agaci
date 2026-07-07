@@ -211,7 +211,10 @@ async function loadPeople(q = "") {
 function renderPeopleList() {
   const ul = $("#people-list");
   ul.innerHTML = "";
-  state.people.forEach((p) => {
+  // İsimliler ve daha çok bilgisi olanlar üstte; isimsiz/eksik kayıtlar sonda.
+  const ordered = [...state.people].sort((a, b) =>
+    personScore(b) - personScore(a) || fullName(a).localeCompare(fullName(b), "tr"));
+  ordered.forEach((p) => {
     const li = document.createElement("li");
     li.className = p.id === state.selectedId ? "active" : "";
     const sub = personSub(p);
@@ -1276,18 +1279,19 @@ const personLink = (p) =>
 async function loadDashboard() {
   const d = await api("/api/dashboard");
 
-  // İstatistik kartları
+  // İstatistik kartları (nav: tıklanınca gidilecek yer / açılacak liste)
   const s = d.stats;
   const cards = [
-    [s.total, "Kişi"],
-    [`${s.females} / ${s.males}`, "Kadın / Erkek"],
-    [s.marriages, "Evlilik"],
-    [s.generations, "Nesil"],
-    [s.with_photo, "Fotoğraflı kişi"],
-    [s.anecdotes, "Anekdot"],
+    [s.total, "Kişi", "people"],
+    [`${s.females} / ${s.males}`, "Kadın / Erkek", ""],
+    [s.marriages, "Evlilik", "list:marriages"],
+    [s.generations, "Nesil", ""],
+    [s.with_photo, "Fotoğraflı kişi", "list:photos"],
+    [s.anecdotes, "Anekdot", "list:anecdotes"],
   ];
   $("#dash-stats").innerHTML = cards
-    .map(([v, l]) => `<div class="stat-card"><div class="v">${esc(String(v))}</div><div class="l">${esc(l)}</div></div>`)
+    .map(([v, l, nav]) => `<div class="stat-card${nav ? " clickable" : ""}"${nav ? ` data-nav="${nav}"` : ""}>
+      <div class="v">${esc(String(v))}</div><div class="l">${esc(l)}</div></div>`)
     .join("") + (s.oldest
       ? `<div class="stat-card wide"><div class="v">${personLink(s.oldest.person)}</div>
          <div class="l">En eski kişi · ${esc(String(s.oldest.year))}</div></div>` : "");
@@ -1347,14 +1351,87 @@ async function loadDashboard() {
      </div>`).join("") || '<p class="muted">Harika — belirgin bir eksik yok! 🎉</p>'}`;
 }
 
-// Dashboard içindeki kişi bağlantıları
+// Dashboard içindeki kişi bağlantıları ve kutu navigasyonu
 $("#tab-home").addEventListener("click", (e) => {
+  const nav = e.target.closest("[data-nav]");
+  if (nav) {
+    const target = nav.dataset.nav;
+    if (target === "people") { switchTab("people"); updateHash({ tab: "people" }); }
+    else if (target.startsWith("list:")) openDashList(target.slice(5));
+    return;
+  }
   const el = e.target.closest("[data-person]");
   if (!el) return;
   e.preventDefault();
   switchTab("people");
   selectPerson(Number(el.dataset.person));
 });
+
+/* ---- Dashboard liste modalı (evlilikler / anekdotlar / fotoğraflar) ---- */
+function ensureModal() {
+  let m = $("#list-modal");
+  if (m) return m;
+  m = document.createElement("div");
+  m.id = "list-modal";
+  m.className = "modal-backdrop hidden";
+  m.innerHTML = `<div class="modal">
+    <div class="modal-head"><h2 id="modal-title"></h2>
+      <button id="modal-close" class="ghost" title="Kapat">✕</button></div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>`;
+  document.body.appendChild(m);
+  const close = () => m.classList.add("hidden");
+  m.addEventListener("click", (e) => { if (e.target === m) close(); });
+  $("#modal-close").addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !m.classList.contains("hidden")) close();
+  });
+  // Modal içi kişi bağlantıları
+  $("#modal-body").addEventListener("click", (e) => {
+    const el = e.target.closest("[data-person]");
+    if (!el) return;
+    close();
+    switchTab("people");
+    selectPerson(Number(el.dataset.person));
+  });
+  return m;
+}
+
+async function openDashList(kind) {
+  const m = ensureModal();
+  $("#modal-title").textContent = "Yükleniyor…";
+  $("#modal-body").innerHTML = "";
+  m.classList.remove("hidden");
+  let d;
+  try { d = await api(`/api/dashboard/list/${kind}`); }
+  catch (_) { $("#modal-body").innerHTML = '<p class="error">Liste yüklenemedi.</p>'; return; }
+  $("#modal-title").textContent = `${d.title} (${d.items.length})`;
+  $("#modal-body").innerHTML = renderDashList(kind, d.items);
+}
+
+function renderDashList(kind, items) {
+  if (!items.length) return '<p class="muted">Kayıt yok.</p>';
+  if (kind === "marriages") {
+    return `<ul class="modal-list">${items.map((it) => {
+      const info = [it.date && trDate(it.date), it.place].filter(Boolean).join(" · ");
+      return `<li>💍 ${it.a ? personLink(it.a) : "?"} — ${it.b ? personLink(it.b) : "?"}
+        ${info ? `<span class="muted">(${esc(info)})</span>` : ""}</li>`;
+    }).join("")}</ul>`;
+  }
+  if (kind === "anecdotes") {
+    return `<ul class="modal-list">${items.map((it) => `<li>
+      <div>${it.title ? `<b>${esc(it.title)}</b> — ` : ""}${it.person ? personLink(it.person) : ""}</div>
+      <div class="anec-text">${esc(it.text)}</div>
+      <div class="muted" style="font-size:0.72rem">${esc(it.author || "")}${it.at ? " · " + fmtAgo(it.at) : ""}</div>
+    </li>`).join("")}</ul>`;
+  }
+  if (kind === "photos") {
+    return `<div class="photo-grid">${items.map((it) => `<a class="photo-cell" data-person="${it.id}" href="#tab=people&person=${it.id}">
+      ${it.photo ? `<img src="${esc(it.photo)}" alt="${esc(it.name)}" />` : `<span class="ph">${esc(initials(it.name))}</span>`}
+      <span class="pc-name">${esc(it.name)}</span></a>`).join("")}</div>`;
+  }
+  return "";
+}
 
 /* ---------------- Build footer ---------------- */
 fetch("/api/version")
