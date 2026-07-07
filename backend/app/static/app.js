@@ -448,10 +448,18 @@ const treeRootLabel = (p) => {
   return fullName(p) + (Number.isFinite(y) ? ` (${y})` : "");
 };
 
-function setTreeRoot(id) {
+function setTreeRoot(id, fallbackLabel) {
   state.treeRootId = id;
   const p = state.people.find((x) => x.id === id);
   if (p) $("#tree-root-input").value = treeRootLabel(p);
+  else if (fallbackLabel) $("#tree-root-input").value = fallbackLabel;
+}
+
+// Karttaki 🌳 ikonundan: mevcut mod korunarak odak bu kişiye geçer.
+function jumpToTree(id, label) {
+  state._treeShown = true;
+  setTreeRoot(id, label);
+  renderTree();
 }
 
 // Seçili kişinin etiketini tazele (kişi listesi yenilendiğinde).
@@ -669,9 +677,10 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   const gZoom = svg.append("g");
   const g = gZoom.append("g").attr("id", "tree-content");
 
-  // Ana kartlar + eş kartları ve çift bağlantıları.
+  // Ana kartlar + eş kartları (sağa) + kardeş kartları (sola, dal açılmadan).
   const cards = [];
   const coupleLinks = [];
+  const sibLinks = [];
   nodes.forEach((d) => {
     cards.push({ x: d.x, y: d.y, data: d.data,
                  focus: focusId !== null && d.data.id === focusId });
@@ -679,6 +688,11 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
       const sx = d.x + (i + 1) * (NODE_W + SPOUSE_GAP);
       coupleLinks.push({ x1: sx - NODE_W - SPOUSE_GAP + NODE_W / 2, x2: sx - NODE_W / 2, y: d.y });
       cards.push({ x: sx, y: d.y, data: sp, focus: false });
+    });
+    (d.data.siblings || []).forEach((sb, i) => {
+      const sx = d.x - (i + 1) * (NODE_W + SPOUSE_GAP);
+      sibLinks.push({ x1: sx + NODE_W / 2, x2: sx + NODE_W / 2 + SPOUSE_GAP, y: d.y });
+      cards.push({ x: sx, y: d.y, data: sb, focus: false });
     });
   });
 
@@ -692,6 +706,13 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
     .data(coupleLinks)
     .join("line")
     .attr("class", "couple-link")
+    .attr("x1", (c) => c.x1).attr("x2", (c) => c.x2)
+    .attr("y1", (c) => c.y).attr("y2", (c) => c.y);
+
+  g.selectAll("line.sib-link")
+    .data(sibLinks)
+    .join("line")
+    .attr("class", "sib-link")
     .attr("x1", (c) => c.x1).attr("x2", (c) => c.x2)
     .attr("y1", (c) => c.y).attr("y2", (c) => c.y);
 
@@ -736,6 +757,23 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   card.append("text")
     .attr("class", "dates").attr("x", TEXT_X).attr("y", 18)
     .text((c) => truncate(datesLabel(c.data), 24));
+
+  // Tam isim + tarihler tarayıcı tooltip'i olarak.
+  card.append("title")
+    .text((c) => [c.data.name, datesLabel(c.data)].filter(Boolean).join("\n"));
+
+  // MyHeritage tarzı "ağacını göster": odağı bu kişiye taşır.
+  const jump = card.filter((c) => !c.focus)
+    .append("g")
+    .attr("class", "jump-btn")
+    .attr("transform", `translate(${NODE_W / 2 - 13},${-NODE_H / 2 + 13})`)
+    .on("click", (e, c) => {
+      e.stopPropagation();
+      jumpToTree(c.data.id, c.data.name);
+    });
+  jump.append("circle").attr("r", 9);
+  jump.append("text").attr("text-anchor", "middle").attr("dy", "3.5").text("🌳");
+  jump.append("title").text("Ağacını göster (odağı buna al)");
 
   treeZoom = d3.zoom()
     .scaleExtent([0.05, 4])
@@ -806,14 +844,15 @@ function centerOn(x, y, scale = 0.9) {
     d3.zoomIdentity.translate(w / 2 - scale * x, h / 2 - scale * y).scale(scale));
 }
 
-// Eş kartları sağa doğru eklendiği için komşu düğümlere ekstra boşluk bırak.
+// Eş kartları sağa, kardeş kartları sola eklendiği için komşu düğümlere
+// yanlarındaki kart sayısı kadar ekstra boşluk bırak.
 function treeLayout() {
-  const spouseSpan = (NODE_W + SPOUSE_GAP) / GAP_X;
-  return d3.tree().nodeSize([GAP_X, GAP_Y]).separation((a, b) => {
-    const s = (a.data.spouses ? a.data.spouses.length : 0) +
-              (b.data.spouses ? b.data.spouses.length : 0);
-    return (a.parent === b.parent ? 1 : 1.2) + s * spouseSpan;
-  });
+  const cardSpan = (NODE_W + SPOUSE_GAP) / GAP_X;
+  const extras = (n) =>
+    (n.data.spouses ? n.data.spouses.length : 0) +
+    (n.data.siblings ? n.data.siblings.length : 0);
+  return d3.tree().nodeSize([GAP_X, GAP_Y]).separation((a, b) =>
+    (a.parent === b.parent ? 1 : 1.2) + (extras(a) + extras(b)) * cardSpan);
 }
 
 function drawPedigree(rootData) {

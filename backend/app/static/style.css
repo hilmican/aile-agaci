@@ -150,6 +150,11 @@ label input, label select { color: var(--ink); }
 .node-card text.dates { font-size: 9px; fill: #6f6a5e; }
 .link { fill: none; stroke: #b0aa9d; stroke-width: 2px; }
 .couple-link { stroke: #b0aa9d; stroke-width: 2px; }
+.sib-link { stroke: #c4bfb2; stroke-width: 1.5px; stroke-dasharray: 5 4; }
+.jump-btn { cursor: pointer; }
+.jump-btn circle { fill: #fff; stroke: #8a8577; stroke-width: 1px; }
+.jump-btn:hover circle { fill: #eaf3ec; stroke: #4a7c59; stroke-width: 1.5px; }
+.jump-btn text { font-size: 10px; }
 
 /* Import */
 .import-card { max-width: 640px; display: flex; flex-direction: column; gap: 0.8rem; align-items: flex-start; }

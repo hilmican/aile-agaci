@@ -271,8 +271,19 @@ def pedigree(
             "photo": f"/uploads/{ind.media[0].filename}" if ind.media else None,
         }
 
+    def siblings_of(pid: int, seen: set[int]) -> list[dict]:
+        """Kişinin kardeşleri (ebeveynlerinin diğer çocukları), dal açmadan."""
+        out: list[dict] = []
+        added: set[int] = set()
+        for par in _parents(db, pid):
+            for ch in _children(db, par.id):
+                if ch.id != pid and ch.id not in added and ch.id not in seen:
+                    added.add(ch.id)
+                    out.append(person_payload(ch))
+        return out
+
     def build(node_id: int, level: int, seen: set[int], step, limit: int,
-              include_spouses: bool = False):
+              include_spouses: bool = False, include_siblings: bool = False):
         ind = db.get(Individual, node_id)
         if ind is None or node_id in seen:
             return None
@@ -280,6 +291,8 @@ def pedigree(
         node = person_payload(ind)
         node["children"] = []
         node["spouses"] = []
+        if include_siblings:
+            node["siblings"] = siblings_of(node_id, seen)
         if include_spouses:
             rows = db.scalars(
                 select(Spouse).where(or_(Spouse.a_id == ind.id, Spouse.b_id == ind.id))
@@ -290,7 +303,8 @@ def pedigree(
                     node["spouses"].append(person_payload(other))
         if level < limit:
             for related in step(db, ind.id):
-                child = build(related.id, level + 1, seen, step, limit, include_spouses)
+                child = build(related.id, level + 1, seen, step, limit,
+                              include_spouses, include_siblings)
                 if child:
                     node["children"].append(child)
         return node
@@ -367,8 +381,11 @@ def pedigree(
         down = build(ind_id, 0, set(), _children, 30, include_spouses=True)
         if down is None:
             raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+        # Odağın ve her atanın kardeşleri dal açılmadan kart olarak eklenir;
+        # aileleri karttaki "ağacını göster" ile ayrı ağaç olarak açılır.
+        down["siblings"] = siblings_of(ind_id, {ind_id})
         up_limit = max(0, depth - 1 - levels(down))
-        up = build(ind_id, 0, set(), _parents, up_limit)
+        up = build(ind_id, 0, set(), _parents, up_limit, include_siblings=True)
         return {"mode": "focus", "down": down, "up": up}
 
     step = _children if direction == "down" else _parents
