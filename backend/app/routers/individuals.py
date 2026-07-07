@@ -314,6 +314,54 @@ def pedigree(
             return 0
         return 1 + max(levels(c) for c in node["children"])
 
+    def ancestor_height(pid: int, cap: int, seen: frozenset) -> int:
+        """cap sınırı içinde pid'den yukarı en uzun ata zinciri."""
+        if cap <= 0:
+            return 0
+        best = 0
+        for par in _parents(db, pid):
+            if par.id not in seen:
+                best = max(best, 1 + ancestor_height(par.id, cap - 1, seen | {par.id}))
+        return best
+
+    def pick_parent(parents: list[Individual], remaining: int) -> Individual | None:
+        """Yukarı tırmanılacak ebeveyni soy koluna göre seç.
+        father/mother: istenen cinsiyet; yoksa None (zincir durur).
+        auto: kalan bütçeyi en iyi kullanan (en derin) ata kolu."""
+        if lineage in ("father", "mother"):
+            want = "M" if lineage == "father" else "F"
+            match = [p for p in parents if p.sex == want]
+            return match[0] if match else None
+        return max(parents,
+                   key=lambda p: ancestor_height(p.id, remaining, frozenset({p.id})))
+
+    def build_up_chain(start_id: int, limit: int) -> dict:
+        """Odaktan yukarı TEK doğrudan soy zinciri. Her atada eşi (diğer
+        ebeveyn) ve kardeşleri kart olarak eklenir; dal açılmaz → ağaç
+        yanlara doğru şişmez. 2. derece aileler karttaki 🌳 ile açılır."""
+        start = db.get(Individual, start_id)
+        root = person_payload(start)
+        root["children"], root["spouses"], root["siblings"] = [], [], []
+        seen = {start_id}
+        cursor, cur_id = root, start_id
+        for lvl in range(limit):
+            parents = _parents(db, cur_id)
+            if not parents:
+                break
+            chosen = pick_parent(parents, limit - lvl - 1)
+            if chosen is None:
+                break
+            cnode = person_payload(chosen)
+            cnode["children"], cnode["spouses"], cnode["siblings"] = [], [], []
+            for o in parents:
+                if o.id != chosen.id and o.id not in seen:
+                    cnode["spouses"].append(person_payload(o))
+            seen.add(chosen.id)
+            cnode["siblings"] = siblings_of(chosen.id, seen)
+            cursor["children"] = [cnode]
+            cursor, cur_id = cnode, chosen.id
+        return root
+
     if direction == "full":
         # Tam ağaç: odak kişiden hareketle kurulur. Önce alt soyunun kaç nesil
         # tuttuğu bulunur; kalan derinlik bütçesi kadar yukarı çıkılır ve o
@@ -325,36 +373,15 @@ def pedigree(
         down_lv = levels(down)
         budget = max(0, depth - 1 - down_lv)
 
-        def ancestor_height(pid: int, cap: int, seen: frozenset) -> int:
-            """cap sınırı içinde pid'den yukarı en uzun ata zinciri."""
-            if cap <= 0:
-                return 0
-            best = 0
-            for par in _parents(db, pid):
-                if par.id not in seen:
-                    best = max(best, 1 + ancestor_height(par.id, cap - 1, seen | {par.id}))
-            return best
-
         root_id, climbed = ind_id, 0
         while climbed < budget:
             parents = _parents(db, root_id)
             if not parents:
                 break
-            if lineage in ("father", "mother"):
-                # İstenen kol: babadan babaya / anneden anneye. Kol kayıtlı
-                # değilse zincir orada biter (öbür kola sapılmaz).
-                want = "M" if lineage == "father" else "F"
-                match = [p for p in parents if p.sex == want]
-                if not match:
-                    break
-                root_id = match[0].id
-            else:
-                # Otomatik: bütçeyi olabildiğince kullanmak için en derin ata koluna tırman.
-                remaining = budget - climbed - 1
-                root_id = max(
-                    parents,
-                    key=lambda p: ancestor_height(p.id, remaining, frozenset({p.id})),
-                ).id
+            chosen = pick_parent(parents, budget - climbed - 1)
+            if chosen is None:  # istenen soy kolu burada bitiyor
+                break
+            root_id = chosen.id
             climbed += 1
         # Pencere kökten itibaren tam depth nesil: tırmanma kısa kalsa bile
         # diğer dallar kalan derinliği kullanabilsin.
@@ -376,16 +403,14 @@ def pedigree(
         return {"mode": "full", "root": tree, "focus_id": ind_id}
 
     if direction == "focus":
-        # Alt soy sonuna kadar (güvenlik tavanı 30); üst soy, toplam nesil
-        # sayısı depth limitini geçmeyecek kadar yukarı gider.
-        down = build(ind_id, 0, set(), _children, 30, include_spouses=True)
+        # Odaklı: doğrudan alt soy + doğrudan üst soy (tek zincir), her ikisi
+        # de derinlik filtresine uyar. Yan üyeler (kardeş/amca/hala) dal
+        # açılmadan kart olarak; 2. derece aileler karttaki 🌳 ile açılır.
+        down = build(ind_id, 0, set(), _children, depth - 1, include_spouses=True)
         if down is None:
             raise HTTPException(status_code=404, detail="Kişi bulunamadı")
-        # Odağın ve her atanın kardeşleri dal açılmadan kart olarak eklenir;
-        # aileleri karttaki "ağacını göster" ile ayrı ağaç olarak açılır.
         down["siblings"] = siblings_of(ind_id, {ind_id})
-        up_limit = max(0, depth - 1 - levels(down))
-        up = build(ind_id, 0, set(), _parents, up_limit, include_siblings=True)
+        up = build_up_chain(ind_id, depth - 1)
         return {"mode": "focus", "down": down, "up": up}
 
     step = _children if direction == "down" else _parents

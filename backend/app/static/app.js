@@ -602,9 +602,10 @@ async function renderTree() {
   else drawPedigree(data);
 }
 
-// Soy kolu seçimi yalnız tam ağaç modunda anlamlı.
+// Soy kolu seçimi üst soyu takip eden modlarda (odaklı + tam ağaç) anlamlı.
 function updateLineageVisibility() {
-  $("#lineage-label").classList.toggle("hidden", $("#tree-direction").value !== "full");
+  const dir = $("#tree-direction").value;
+  $("#lineage-label").classList.toggle("hidden", dir !== "full" && dir !== "focus");
 }
 
 // Mod/derinlik/soy kolu değişince yeniden çiz (kök seçiliyse).
