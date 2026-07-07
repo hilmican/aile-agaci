@@ -249,12 +249,26 @@ function renderDetail(p) {
       ${field("Ölüm", trDate(p.death_date), p.death_place)}
       ${field("Kızlık soyadı", p.maiden_name)}
       ${field("Meslek", p.occupation)}
+      ${lastResidenceField(p)}
     </div>
     ${p.notes ? `<div class="field"><span class="k">Notlar</span><div>${esc(p.notes)}</div></div>` : ""}
+
+    ${contactSection(p)}
 
     ${relSection("Ebeveynler", "parent", p.parents)}
     ${relSection("Eş(ler)", "spouse", p.spouses.map((s) => s.person))}
     ${relSection("Çocuklar", "child", p.children)}
+
+    <div class="rel-section">
+      <h3>Yaşadığı Yerler</h3>
+      <div class="residences">${residencesHtml(p)}</div>
+      ${canEdit() ? `<div class="inline-form">
+        <input type="text" id="res-period" placeholder="Dönem (örn. 1998)" style="width:130px" />
+        <input type="text" id="res-place" placeholder="Yer (örn. Ankara)" />
+        <input type="text" id="res-note" placeholder="Not (isteğe bağlı)" />
+        <button id="res-add">Ekle</button>
+      </div>` : ""}
+    </div>
 
     <div class="rel-section">
       <h3>Görseller</h3>
@@ -297,6 +311,23 @@ function renderDetail(p) {
         if (!confirm("Anekdot silinsin mi?")) return;
         await api(`/api/individuals/${p.id}/anecdotes/${btn.dataset.anecDel}`, { method: "DELETE" });
         toast("Anekdot silindi");
+        selectPerson(p.id);
+      }));
+    $("#res-add").addEventListener("click", async () => {
+      const place = $("#res-place").value.trim();
+      if (!place) return toast("Yer boş olamaz", true);
+      await api(`/api/individuals/${p.id}/residences`, {
+        method: "POST",
+        json: { place, period: $("#res-period").value.trim(), note: $("#res-note").value.trim() },
+      });
+      toast("Yaşam yeri eklendi");
+      selectPerson(p.id);
+    });
+    $$("[data-res-del]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Kayıt silinsin mi?")) return;
+        await api(`/api/individuals/${p.id}/residences/${btn.dataset.resDel}`, { method: "DELETE" });
+        toast("Silindi");
         selectPerson(p.id);
       }));
     $$("[data-rel]").forEach((chip) => {
@@ -359,6 +390,39 @@ function renderRelAdders(p) {
 
 const relLabel = (t) => ({ parent: "ebeveyn", spouse: "eş", child: "çocuk" }[t] || t);
 
+// En son (en yeni yıllı) yaşadığı yeri özet alanı olarak göster.
+function lastResidenceField(p) {
+  const res = p.residences || [];
+  if (!res.length) return "";
+  const last = res[res.length - 1];
+  const val = [last.period, last.place].filter(Boolean).join(" ");
+  return `<div class="field"><span class="k">Son yaşadığı yer</span><div>${esc(val)}</div></div>`;
+}
+
+function residencesHtml(p) {
+  const res = p.residences || [];
+  if (!res.length) return '<span class="muted">Kayıt yok</span>';
+  return `<ol class="res-timeline">${res.map((r) => {
+    const del = canEdit() ? `<button class="small danger" data-res-del="${r.id}">Sil</button>` : "";
+    const per = r.period ? `<span class="res-period">${esc(r.period)}</span>` : "";
+    const note = r.note ? `<span class="res-note">— ${esc(r.note)}</span>` : "";
+    return `<li>${per}<span class="res-place">${esc(r.place)}</span> ${note} ${del}</li>`;
+  }).join("")}</ol>`;
+}
+
+function contactSection(p) {
+  const rows = [];
+  if ((p.phone || "").trim())
+    rows.push(`<span class="k">Telefon</span><div><a href="tel:${esc(p.phone.replace(/\s/g, ""))}">${esc(p.phone)}</a></div>`);
+  if ((p.email || "").trim())
+    rows.push(`<span class="k">E-posta</span><div><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></div>`);
+  if ((p.address || "").trim())
+    rows.push(`<span class="k">Adres</span><div><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(p.address)}">${esc(p.address)}</a></div>`);
+  if (!rows.length) return "";
+  return `<div class="rel-section"><h3>İletişim</h3>
+    <div class="detail-grid">${rows.map((r) => `<div class="field">${r}</div>`).join("")}</div></div>`;
+}
+
 function anecdoteHtml(a) {
   const del = canEdit() ? `<button class="small danger" data-anec-del="${a.id}">Sil</button>` : "";
   const when = a.created_at
@@ -387,6 +451,7 @@ const PERSON_FIELDS = [
   ["birth_date", "Doğum tarihi"], ["birth_place", "Doğum yeri"],
   ["death_date", "Ölüm tarihi"], ["death_place", "Ölüm yeri"],
   ["occupation", "Meslek"],
+  ["phone", "Telefon"], ["email", "E-posta"], ["address", "Adres"],
 ];
 
 function personForm(p = {}) {
@@ -1158,6 +1223,8 @@ async function loadDashboard() {
     media_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir görseli sildi`,
     anecdote_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> hakkında bir anekdot ekledi${f.detail ? `: “${esc(f.detail)}”` : ""}`,
     anecdote_deleted: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir anekdotu sildi`,
+    residence_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için yaşadığı yer ekledi${f.detail ? `: ${esc(f.detail)}` : ""}`,
+    residence_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir yaşam yeri kaydını sildi`,
     gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
   };
   function nameOrLink(f) {
@@ -1198,7 +1265,14 @@ $("#tab-home").addEventListener("click", (e) => {
 /* ---------------- Build footer ---------------- */
 fetch("/api/version")
   .then((r) => r.json())
-  .then((v) => { $("#build-footer").textContent = `Sürüm ${v.version} · Yapı ${v.build}`; })
+  .then((v) => {
+    $("#build-footer").textContent = `Sürüm ${v.version} · Yapı ${v.build}`;
+    // GEDCOM içe aktarma kapalıysa sekmeyi tamamen gizle (yanlışlıkla ezmeye karşı).
+    if (!v.gedcom_import) {
+      document.querySelector('.tab[data-tab="import"]')?.classList.add("hidden");
+      $("#tab-import")?.classList.add("import-off");
+    }
+  })
   .catch(() => {});
 
 /* ---------------- Start ---------------- */

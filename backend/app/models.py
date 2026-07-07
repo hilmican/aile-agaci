@@ -40,6 +40,10 @@ class Individual(Base):
     death_place: Mapped[str] = mapped_column(String(255), default="")
     occupation: Mapped[str] = mapped_column(String(255), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # İletişim bilgileri (yaşayanlar için pratik erişim)
+    phone: Mapped[str] = mapped_column(String(100), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    address: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -76,6 +80,21 @@ class Spouse(Base):
     )
     marriage_date: Mapped[str] = mapped_column(String(100), default="")
     marriage_place: Mapped[str] = mapped_column(String(255), default="")
+
+
+class Residence(Base):
+    """Kişinin bir dönem yaşadığı yer: '1998 Ankara', '2001 İstanbul' gibi.
+    year_from sıralama için sayısal; place serbest metin."""
+    __tablename__ = "residences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    individual_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    place: Mapped[str] = mapped_column(String(255), default="")
+    year_from: Mapped[int | None] = mapped_column(nullable=True)  # sıralama anahtarı
+    period: Mapped[str] = mapped_column(String(100), default="")  # serbest: "1998", "2001–2005"
+    note: Mapped[str] = mapped_column(String(500), default="")
 
 
 class Anecdote(Base):

@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from .config import settings
 from .database import Base, SessionLocal, engine, wait_for_db
@@ -61,10 +61,25 @@ def cleanup_imported_text() -> None:
             db.commit()
 
 
+def ensure_schema() -> None:
+    """Additif şema göçü: create_all yeni tablolar açar ama mevcut tablolara
+    sütun EKLEMEZ. Modelde sonradan eklenen sütunları verileri koruyarak
+    (DROP yok) ekler. Idempotent — 'IF NOT EXISTS' sayesinde tekrar çalışabilir."""
+    alters = [
+        "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS phone VARCHAR(100) NOT NULL DEFAULT ''",
+        "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS email VARCHAR(255) NOT NULL DEFAULT ''",
+        "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS address VARCHAR(500) NOT NULL DEFAULT ''",
+    ]
+    with engine.begin() as conn:
+        for stmt in alters:
+            conn.execute(text(stmt))
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     wait_for_db()
     Base.metadata.create_all(bind=engine)
+    ensure_schema()
     os.makedirs(settings.upload_dir, exist_ok=True)
     seed_admin()
     cleanup_imported_text()
@@ -96,7 +111,11 @@ BUILD_ID = _build_id()
 
 @app.get("/api/version")
 def version():
-    return {"build": BUILD_ID, "version": app.version}
+    return {
+        "build": BUILD_ID,
+        "version": app.version,
+        "gedcom_import": settings.allow_gedcom_import,
+    }
 
 
 # Uploaded images

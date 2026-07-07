@@ -4,9 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..activity import log_activity
+from ..config import settings
 from ..database import get_db
 from ..gedcom import parse_gedcom
-from ..models import Individual, ParentChild, Spouse, User
+from ..models import Individual, ParentChild, Residence, Spouse, User
 from ..schemas import ImportResult
 from ..security import get_current_user, require_editor
 
@@ -19,6 +20,12 @@ async def import_gedcom(
     db: Session = Depends(get_db),
     user: User = Depends(require_editor),
 ):
+    if not settings.allow_gedcom_import:
+        raise HTTPException(
+            status_code=403,
+            detail="GEDCOM içe aktarma kapalı. Mevcut veriyi ezme/mükerrer kayıt "
+                   "riskine karşı devre dışı. Açmak için ALLOW_GEDCOM_IMPORT=true.",
+        )
     raw = await file.read()
     try:
         text = raw.decode("utf-8-sig")
@@ -125,6 +132,22 @@ def export_gedcom(db: Session = Depends(get_db), _: User = Depends(get_current_u
                 lines.append(f"2 PLAC {ind.death_place}")
         if ind.occupation:
             lines.append(f"1 OCCU {ind.occupation}")
+        if ind.phone:
+            lines.append(f"1 PHON {ind.phone}")
+        if ind.email:
+            lines.append(f"1 EMAIL {ind.email}")
+        if ind.address:
+            lines.append(f"1 ADDR {ind.address}")
+        for res in db.scalars(
+            select(Residence).where(Residence.individual_id == ind.id)
+        ).all():
+            lines.append("1 RESI")
+            if res.place:
+                lines.append(f"2 PLAC {res.place}")
+            if res.period:
+                lines.append(f"2 DATE {res.period}")
+            if res.note:
+                lines.append(f"2 NOTE {res.note}")
 
     # Build families from spouse + parent_child edges.
     fam_index = 0

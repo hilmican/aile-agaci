@@ -43,6 +43,9 @@ class IndividualBase(BaseModel):
     death_place: str = ""
     occupation: str = ""
     notes: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
 
 
 class IndividualCreate(IndividualBase):
@@ -60,6 +63,9 @@ class IndividualUpdate(BaseModel):
     death_place: str | None = None
     occupation: str | None = None
     notes: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    address: str | None = None
 
 
 class MediaOut(BaseModel):
@@ -99,12 +105,29 @@ class AnecdoteOut(BaseModel):
     created_at: datetime | None = None
 
 
+class ResidenceCreate(BaseModel):
+    place: str
+    period: str = ""
+    note: str = ""
+
+
+class ResidenceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    individual_id: int
+    place: str = ""
+    period: str = ""
+    note: str = ""
+    year_from: int | None = None
+
+
 class IndividualDetail(IndividualSummary):
     parents: list[IndividualSummary] = []
     children: list[IndividualSummary] = []
     spouses: list[SpouseLink] = []
     media: list[MediaOut] = []
     anecdotes: list[AnecdoteOut] = []
+    residences: list[ResidenceOut] = []
 
 
 # ---- Relationships ----

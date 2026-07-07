@@ -30,5 +30,10 @@ class Settings(BaseSettings):
     admin_password: str = "admin1234"
     admin_name: str = "Yönetici"
 
+    # GEDCOM içe aktarma güvenlik nedeniyle varsayılan KAPALI. İlk kurulumdan
+    # sonra yeniden import mükerrer kayıt / veri riski taşır. Açmak için
+    # ortam değişkeni ALLOW_GEDCOM_IMPORT=true verin.
+    allow_gedcom_import: bool = False
+
 
 settings = Settings()

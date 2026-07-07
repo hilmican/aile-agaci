@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..activity import log_activity
 from ..config import settings
 from ..database import get_db
-from ..models import Anecdote, Individual, Media, ParentChild, Spouse
+from ..models import Anecdote, Individual, Media, ParentChild, Residence, Spouse
 from ..schemas import (
     AnecdoteCreate,
     AnecdoteOut,
@@ -18,8 +18,11 @@ from ..schemas import (
     IndividualUpdate,
     MediaOut,
     RelationshipCreate,
+    ResidenceCreate,
+    ResidenceOut,
     SpouseLink,
 )
+import re as _re
 from ..security import get_current_user, require_editor
 from ..models import User
 
@@ -76,6 +79,10 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
             .order_by(Anecdote.created_at.desc())
         ).all()
     ]
+    # Yaşam yeri geçmişi: yıla göre eskiden yeniye (en son yer en altta).
+    res = db.scalars(select(Residence).where(Residence.individual_id == ind.id)).all()
+    res.sort(key=lambda r: (r.year_from if r.year_from is not None else 9999, r.id))
+    detail.residences = [ResidenceOut.model_validate(r) for r in res]
     return detail
 
 
@@ -550,4 +557,55 @@ def delete_anecdote(
     ind = db.get(Individual, ind_id)
     if ind is not None:
         log_activity(db, user, "anecdote_deleted", ind)
+    db.commit()
+
+
+# ---- Yaşam yeri geçmişi ----
+def _year_from_period(period: str) -> int | None:
+    m = _re.search(r"\d{3,4}", period or "")
+    return int(m.group(0)) if m else None
+
+
+@router.post("/{ind_id}/residences", response_model=ResidenceOut, status_code=201)
+def add_residence(
+    ind_id: int,
+    payload: ResidenceCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    ind = db.get(Individual, ind_id)
+    if ind is None:
+        raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+    place = payload.place.strip()
+    if not place:
+        raise HTTPException(status_code=400, detail="Yer boş olamaz")
+    res = Residence(
+        individual_id=ind.id,
+        place=place,
+        period=payload.period.strip(),
+        year_from=_year_from_period(payload.period),
+        note=payload.note.strip(),
+    )
+    db.add(res)
+    label = f"{res.period + ' ' if res.period else ''}{place}".strip()
+    log_activity(db, user, "residence_added", ind, label)
+    db.commit()
+    db.refresh(res)
+    return ResidenceOut.model_validate(res)
+
+
+@router.delete("/{ind_id}/residences/{residence_id}", status_code=204)
+def delete_residence(
+    ind_id: int,
+    residence_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    res = db.get(Residence, residence_id)
+    if res is None or res.individual_id != ind_id:
+        raise HTTPException(status_code=404, detail="Kayıt bulunamadı")
+    db.delete(res)
+    ind = db.get(Individual, ind_id)
+    if ind is not None:
+        log_activity(db, user, "residence_removed", ind)
     db.commit()
