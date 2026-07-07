@@ -130,6 +130,10 @@ label input, label select { color: var(--ink); }
 .tree-canvas svg:active { cursor: grabbing; }
 .zoom-controls { display: flex; gap: 0.3rem; }
 .zoom-controls button { min-width: 2.2rem; }
+.zoom-controls button.active { background: #4a7c59; color: #fff; border-color: #4a7c59; }
+/* Sadece ağaç sekmesi tam ekranda: kontrol çubuğu üstte, kanvas kalanı doldurur */
+#tab-tree:fullscreen { background: #edebe6; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; }
+#tab-tree:fullscreen .tree-canvas { flex: 1; height: auto; min-height: 0; }
 .combo { position: relative; }
 #tree-root-input { min-width: 230px; }
 .combo-list { position: absolute; top: calc(100% + 2px); left: 0; right: 0; max-height: 260px; overflow: auto; background: #fff; border: 1px solid var(--border); border-radius: 8px; z-index: 30; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }

@@ -665,8 +665,8 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   const height = Math.max(canvas.clientHeight, 560);
 
   const svg = d3.select(canvas).append("svg")
-    .attr("width", width)
-    .attr("height", height);
+    .attr("width", "100%")
+    .attr("height", "100%");
 
   // Tüm kartlar aynı yerel koordinatları kullandığı için tek clipPath yeter.
   svg.append("defs").append("clipPath").attr("id", "avatar-clip")
@@ -808,6 +808,8 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
 /* ---- Mercek (loupe) ---- */
 const MAG_THRESHOLD = 0.55; // bu ölçeğin üstünde kartlar zaten okunur, mercek gizli
 const MAG_SCALE = 0.7;      // mercek içindeki büyütme
+// Kullanıcı merceği kapatabilir: kapalıyken hiç açılmaz, kendisi zoom yapar.
+let magnifierEnabled = localStorage.getItem("aile-loupe") !== "off";
 
 function hideMagnifier() {
   const mag = $("#magnifier");
@@ -816,7 +818,7 @@ function hideMagnifier() {
 
 function updateMagnifier(event) {
   const mag = $("#magnifier");
-  if (!mag || !treeSvg) return;
+  if (!mag || !treeSvg || !magnifierEnabled) { if (mag) mag.classList.add("hidden"); return; }
   const svgNode = treeSvg.node();
   const t = d3.zoomTransform(svgNode);
   if (t.k >= MAG_THRESHOLD) { mag.classList.add("hidden"); return; }
@@ -904,6 +906,30 @@ $("#zoom-in").addEventListener("click", () =>
 $("#zoom-out").addEventListener("click", () =>
   treeSvg && treeSvg.transition().duration(200).call(treeZoom.scaleBy, 1 / 1.3));
 $("#zoom-fit").addEventListener("click", () => fitTree());
+
+// Mercek aç/kapa (tercih saklanır).
+function syncLoupeButton() {
+  $("#zoom-loupe").classList.toggle("active", magnifierEnabled);
+}
+$("#zoom-loupe").addEventListener("click", () => {
+  magnifierEnabled = !magnifierEnabled;
+  localStorage.setItem("aile-loupe", magnifierEnabled ? "on" : "off");
+  syncLoupeButton();
+  if (!magnifierEnabled) hideMagnifier();
+});
+syncLoupeButton();
+
+// Sadece ağaç sekmesini tam ekran yap (kontroller görünür kalsın diye #tab-tree).
+$("#zoom-full").addEventListener("click", () => {
+  const el = $("#tab-tree");
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (el.requestFullscreen) el.requestFullscreen();
+});
+// Tam ekrana gir/çıkınca kanvas boyutu değişir → görünümü yeniden sığdır.
+document.addEventListener("fullscreenchange", () => {
+  $("#zoom-full").classList.toggle("active", !!document.fullscreenElement);
+  setTimeout(() => fitTree(false), 80);
+});
 
 function selectFromTree(id) {
   $$(".tab").forEach((b) => b.classList.remove("active"));
