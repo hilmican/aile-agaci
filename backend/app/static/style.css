@@ -193,6 +193,13 @@ label input, label select { color: var(--ink); }
 .sp-edit { display: flex; gap: 0.4rem; flex-wrap: wrap; flex-basis: 100%; margin-top: 0.2rem; }
 .sp-edit input { font-size: 0.85rem; }
 
+/* Zaman haritası */
+.map-controls { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
+.map-controls #map-year { flex: 1; min-width: 200px; }
+.map-year-label { font-weight: 700; font-size: 1.1rem; min-width: 3.2rem; }
+#map-canvas { height: 68vh; min-height: 460px; border: 1px solid var(--border); border-radius: 10px; }
+.map-unresolved { font-size: 0.75rem; margin-top: 0.5rem; }
+
 /* Aile kolları */
 .fam-chip { background: #6a5acd18; border-color: #6a5acd55; }
 .fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.7rem; margin-bottom: 1.2rem; }

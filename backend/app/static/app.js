@@ -153,6 +153,7 @@ $$(".tab").forEach((btn) => {
     if (tab === "tree") populateTreeRoots();
     if (tab === "home") loadDashboard();
     if (tab === "families") openFamilies();
+    if (tab === "map") openMap();
   });
 });
 
@@ -193,6 +194,7 @@ async function applyHash() {
     await openFamilies(h.get("fam") ? Number(h.get("fam")) : undefined);
     return true;
   }
+  if (tab === "map") { await openMap(); return true; }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
@@ -1493,6 +1495,88 @@ $("#tab-home").addEventListener("click", (e) => {
   switchTab("people");
   selectPerson(Number(el.dataset.person));
 });
+
+/* ---- Zaman bazlı coğrafi harita ---- */
+let mapObj = null, mapLayer = null, mapData = null, mapPlayTimer = null;
+
+async function openMap() {
+  switchTab("map");
+  updateHash({ tab: "map" });
+  if (!mapObj) {
+    mapObj = L.map("map-canvas", { scrollWheelZoom: true }).setView([39.5, 35.0], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: "© OpenStreetMap",
+    }).addTo(mapObj);
+    mapLayer = L.layerGroup().addTo(mapObj);
+  }
+  setTimeout(() => mapObj.invalidateSize(), 100); // sekme görünür olunca boyutlan
+  if (!mapData) {
+    try { mapData = await api("/api/map/timeline"); }
+    catch (_) { toast("Harita verisi yüklenemedi", true); return; }
+    const slider = $("#map-year");
+    slider.min = mapData.min_year;
+    slider.max = mapData.max_year;
+    slider.value = mapData.max_year;
+    slider.addEventListener("input", () => drawMapYear(Number(slider.value)));
+    $("#map-play").addEventListener("click", toggleMapPlay);
+    const un = mapData.unresolved || [];
+    $("#map-unresolved").textContent = un.length
+      ? `Haritaya konulamayan ${un.length} yer (il tanınmadı): ${un.slice(0, 12).join(", ")}${un.length > 12 ? "…" : ""}`
+      : "";
+  }
+  drawMapYear(Number($("#map-year").value));
+}
+
+// Belirli bir yılda kişiyi konumlandır: o yılı kapsayan "stay".
+function stayAt(person, year) {
+  for (const s of person.stays) {
+    if (year >= s.from && year <= s.to) return s;
+  }
+  return null;
+}
+
+// Kişiye göre küçük sabit sapma (aynı ildeki noktalar üst üste binmesin).
+function jitter(id) {
+  const a = (id * 2654435761) % 1000 / 1000;
+  const b = (id * 40503) % 1000 / 1000;
+  return [(a - 0.5) * 0.5, (b - 0.5) * 0.5];
+}
+
+function drawMapYear(year) {
+  if (!mapData || !mapLayer) return;
+  mapLayer.clearLayers();
+  let n = 0;
+  mapData.people.forEach((p) => {
+    if (p.birth_year && year < p.birth_year) return;
+    if (p.death_year && year > p.death_year) return;
+    const s = stayAt(p, year);
+    if (!s) return;
+    const [dy, dx] = jitter(p.id);
+    const color = p.sex === "M" ? "#5b9bd1" : p.sex === "F" ? "#dd8ba1" : "#8a8577";
+    L.circleMarker([s.lat + dy, s.lng + dx], {
+      radius: 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.85,
+    }).bindPopup(`<b>${esc(p.name)}</b>`).addTo(mapLayer);
+    n++;
+  });
+  $("#map-year-label").textContent = year;
+  $("#map-count").textContent = `${n} kişi`;
+}
+
+function toggleMapPlay() {
+  const btn = $("#map-play");
+  if (mapPlayTimer) {
+    clearInterval(mapPlayTimer); mapPlayTimer = null; btn.textContent = "▶"; return;
+  }
+  btn.textContent = "⏸";
+  const slider = $("#map-year");
+  if (Number(slider.value) >= Number(slider.max)) slider.value = slider.min;
+  mapPlayTimer = setInterval(() => {
+    let y = Number(slider.value);
+    if (y >= Number(slider.max)) { clearInterval(mapPlayTimer); mapPlayTimer = null; btn.textContent = "▶"; return; }
+    slider.value = y + 1;
+    drawMapYear(y + 1);
+  }, 350);
+}
 
 /* ---- Aile kümeleri ---- */
 async function openFamilies(focusId) {

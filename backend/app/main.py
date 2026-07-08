@@ -9,7 +9,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine, wait_for_db
 from .gedcom import clean_text
 from .models import Individual, Spouse, User
-from .routers import auth, dashboard, families, gedcom_router, individuals, users
+from .routers import auth, dashboard, families, gedcom_router, individuals, map_router, users
 from .security import hash_password
 
 app = FastAPI(title="Baycan Aile Ağacı", version="1.0.0")
@@ -95,6 +95,7 @@ app.include_router(individuals.router)
 app.include_router(gedcom_router.router)
 app.include_router(dashboard.router)
 app.include_router(families.router)
+app.include_router(map_router.router)
 
 
 @app.get("/api/health")
