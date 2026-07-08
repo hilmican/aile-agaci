@@ -1218,6 +1218,20 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   jump.append("text").attr("text-anchor", "middle").attr("dy", "3.5").text("🌳");
   jump.append("title").text("Ağacını göster (odağı buna al)");
 
+  // Hızlı düzenleme ikonu (sol üst köşe) — yalnız düzenleyiciye.
+  if (canEdit()) {
+    const editG = card.append("g")
+      .attr("class", "edit-btn")
+      .attr("transform", `translate(${-NODE_W / 2 + 13},${-NODE_H / 2 + 13})`)
+      .on("click", (e, c) => {
+        e.stopPropagation();
+        openQuickEdit(c.data.id);
+      });
+    editG.append("circle").attr("r", 9);
+    editG.append("text").attr("text-anchor", "middle").attr("dy", "3.5").text("✏️");
+    editG.append("title").text("Hızlı düzenle");
+  }
+
   treeZoom = d3.zoom()
     .scaleExtent([0.05, 4])
     .on("zoom", (e) => {
@@ -1711,6 +1725,74 @@ async function applyBulk() {
   toast(`${r.updated} kişi güncellendi`);
   bulkData = await api("/api/bulk/list"); // tazele
   renderBulk();
+}
+
+/* ---- Ağaçtan hızlı düzenleme popup'ı ---- */
+async function openQuickEdit(id) {
+  let p;
+  try { p = await api("/api/individuals/" + id); }
+  catch (_) { return toast("Kişi yüklenemedi", true); }
+
+  let ov = $("#quick-edit");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "quick-edit";
+    ov.className = "modal-backdrop hidden";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); });
+  }
+  const sexOpt = (v, l) => `<option value="${v}" ${p.sex === v ? "selected" : ""}>${l}</option>`;
+  ov.innerHTML = `<div class="qe-modal">
+    <div class="modal-head"><h2>Hızlı Düzenle</h2><button class="ghost" data-qe-close>✕</button></div>
+    <div class="qe-body">
+      <div class="detail-grid">
+        <label>Ad<input id="qe-first" value="${esc(p.first_name || "")}" /></label>
+        <label>Soyad<input id="qe-last" value="${esc(p.last_name || "")}" /></label>
+        <label>Cinsiyet<select id="qe-sex">
+          ${sexOpt("U", "Bilinmiyor")}${sexOpt("M", "Erkek")}${sexOpt("F", "Kadın")}
+        </select></label>
+        <label>Doğum tarihi<input id="qe-bd" value="${esc(p.birth_date || "")}" /></label>
+        <label>Doğum yeri<input id="qe-bp" value="${esc(p.birth_place || "")}" data-place="birth" autocomplete="off" /></label>
+        <label>Ölüm tarihi<input id="qe-dd" value="${esc(p.death_date || "")}" /></label>
+        <label>Ölüm yeri<input id="qe-dp" value="${esc(p.death_place || "")}" /></label>
+      </div>
+      <input type="hidden" id="qe-blat" value="${p.birth_lat ?? ""}" />
+      <input type="hidden" id="qe-blng" value="${p.birth_lng ?? ""}" />
+      <div class="detail-actions" style="margin-top:0.8rem">
+        <button data-qe-save>Kaydet</button>
+        <button class="ghost" data-qe-close>Vazgeç</button>
+        <a class="qe-full" href="#tab=people&person=${id}&edit=1" target="_blank" rel="noopener">Tüm alanlar →</a>
+      </div>
+    </div>
+  </div>`;
+  ov.querySelectorAll("[data-qe-close]").forEach((b) =>
+    b.addEventListener("click", () => ov.classList.add("hidden")));
+  attachPlaceAutocomplete($("#qe-bp"), (pick) => {
+    $("#qe-blat").value = pick ? pick.lat : "";
+    $("#qe-blng").value = pick ? pick.lon : "";
+  });
+  ov.querySelector("[data-qe-save]").addEventListener("click", async () => {
+    const blat = $("#qe-blat").value, blng = $("#qe-blng").value;
+    const payload = {
+      first_name: $("#qe-first").value.trim(),
+      last_name: $("#qe-last").value.trim(),
+      sex: $("#qe-sex").value,
+      birth_date: $("#qe-bd").value.trim(),
+      birth_place: $("#qe-bp").value.trim(),
+      death_date: $("#qe-dd").value.trim(),
+      death_place: $("#qe-dp").value.trim(),
+      birth_lat: blat === "" ? null : Number(blat),
+      birth_lng: blng === "" ? null : Number(blng),
+    };
+    try {
+      await api("/api/individuals/" + id, { method: "PATCH", json: payload });
+      ov.classList.add("hidden");
+      toast("Kaydedildi");
+      await loadPeople();      // liste/etiketler tazelensin
+      if (state.treeRootId) renderTree(); // ağacı güncelle
+    } catch (err) { toast(err.message, true); }
+  });
+  ov.classList.remove("hidden");
 }
 
 /* ---- Zaman bazlı coğrafi harita ---- */
