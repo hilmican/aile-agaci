@@ -898,7 +898,7 @@ function loadTreeState() {
 
 async function renderTree() {
   const rootId = Number(state.treeRootId);
-  const depth = Number($("#tree-depth").value) || 8;
+  const depth = Number($("#tree-depth").value) || 12;
   const direction = $("#tree-direction").value || "down";
   const lineage = $("#tree-lineage").value || "auto";
   if (!rootId) return;
