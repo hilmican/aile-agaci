@@ -129,6 +129,16 @@ class ResidenceOut(BaseModel):
     year_from: int | None = None
 
 
+class FamilyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
+class FamilyAdd(BaseModel):
+    name: str
+
+
 class IndividualDetail(IndividualSummary):
     parents: list[IndividualSummary] = []
     children: list[IndividualSummary] = []
@@ -136,6 +146,7 @@ class IndividualDetail(IndividualSummary):
     media: list[MediaOut] = []
     anecdotes: list[AnecdoteOut] = []
     residences: list[ResidenceOut] = []
+    families: list[FamilyOut] = []
 
 
 # ---- Relationships ----

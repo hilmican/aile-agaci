@@ -82,6 +82,28 @@ class Spouse(Base):
     marriage_place: Mapped[str] = mapped_column(String(255), default="")
 
 
+class Family(Base):
+    """Soyaddan bağımsız aile kolu/kümesi: Vasiloğulları, Salehler, Mitçarliler…"""
+    __tablename__ = "families"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+
+
+class IndividualFamily(Base):
+    """Kişi ↔ aile kolu (çoklu: bir kişi birden fazla kola ait olabilir)."""
+    __tablename__ = "individual_families"
+    __table_args__ = (UniqueConstraint("individual_id", "family_id", name="uq_individual_family"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    individual_id: Mapped[int] = mapped_column(
+        ForeignKey("individuals.id", ondelete="CASCADE"), index=True
+    )
+    family_id: Mapped[int] = mapped_column(
+        ForeignKey("families.id", ondelete="CASCADE"), index=True
+    )
+
+
 class Residence(Base):
     """Kişinin yaşadığı yer, zaman aralığıyla. Bitiş boşsa hâlâ orada yaşıyor.
     year_from sıralama anahtarı; place serbest metin."""

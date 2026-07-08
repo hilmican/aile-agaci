@@ -152,6 +152,7 @@ $$(".tab").forEach((btn) => {
     updateHash({ tab });
     if (tab === "tree") populateTreeRoots();
     if (tab === "home") loadDashboard();
+    if (tab === "families") openFamilies();
   });
 });
 
@@ -186,6 +187,10 @@ async function applyHash() {
   }
   if (tab === "list" && h.get("kind")) {
     await openListPage(h.get("kind"), h.get("item") || undefined);
+    return true;
+  }
+  if (tab === "families") {
+    await openFamilies(h.get("fam") ? Number(h.get("fam")) : undefined);
     return true;
   }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
@@ -259,6 +264,19 @@ function renderDetail(p) {
       ${lastResidenceField(p)}
     </div>
     ${p.notes ? `<div class="field"><span class="k">Notlar</span><div>${esc(p.notes)}</div></div>` : ""}
+
+    <div class="rel-section">
+      <h3>Aile Kolları</h3>
+      <div class="rel-chips">${(p.families || []).map((f) =>
+        `<span class="chip fam-chip" data-fam-go="${f.id}">${esc(f.name)}
+          ${canEdit() ? `<span class="x" data-fam-del="${f.id}" title="Kaldır">×</span>` : ""}</span>`
+      ).join("") || '<span class="muted">—</span>'}</div>
+      ${canEdit() ? `<div class="inline-form">
+        <input type="text" id="fam-input" list="fam-datalist" placeholder="Aile kolu (örn. Vasiloğulları)" />
+        <datalist id="fam-datalist"></datalist>
+        <button id="fam-add">Ekle</button>
+      </div>` : ""}
+    </div>
 
     ${contactSection(p)}
 
@@ -343,6 +361,25 @@ function renderDetail(p) {
         toast("Silindi");
         selectPerson(p.id);
       }));
+    // Aile kolu ekle (datalist ile otomatik tamamlama)
+    api("/api/families").then((d) => {
+      const dl = $("#fam-datalist");
+      if (dl) dl.innerHTML = d.items.map((f) => `<option value="${esc(f.name)}"></option>`).join("");
+    }).catch(() => {});
+    $("#fam-add").addEventListener("click", async () => {
+      const name = $("#fam-input").value.trim();
+      if (!name) return toast("Aile kolu adı yazın", true);
+      await api(`/api/individuals/${p.id}/families`, { method: "POST", json: { name } });
+      toast("Aile kolu eklendi");
+      selectPerson(p.id);
+    });
+    $$("[data-fam-del]").forEach((el) =>
+      el.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        await api(`/api/individuals/${p.id}/families/${el.dataset.famDel}`, { method: "DELETE" });
+        toast("Kaldırıldı");
+        selectPerson(p.id);
+      }));
     $$("[data-sp-edit]").forEach((btn) =>
       btn.addEventListener("click", () =>
         document.querySelector(`[data-sp-form="${btn.dataset.spEdit}"]`)?.classList.toggle("hidden")));
@@ -370,6 +407,12 @@ function renderDetail(p) {
   // Clicking a related person navigates to them.
   $$("[data-goto]").forEach((chip) =>
     chip.addEventListener("click", () => selectPerson(Number(chip.dataset.goto))));
+  // Aile kolu rozetine tıklayınca o kümenin üyelerine git.
+  $$("[data-fam-go]").forEach((chip) =>
+    chip.addEventListener("click", (e) => {
+      if (e.target.closest("[data-fam-del]")) return;
+      openFamilies(Number(chip.dataset.famGo));
+    }));
 }
 
 function field(label, a, b) {
@@ -1405,6 +1448,8 @@ async function loadDashboard() {
     marriage_updated: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b>${f.detail ? ` – ${esc(f.detail)}` : ""} evlilik bilgisini güncelledi`,
     residence_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için yaşadığı yer ekledi${f.detail ? `: ${esc(f.detail)}` : ""}`,
     residence_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> için bir yaşam yeri kaydını sildi`,
+    family_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini <b>${esc(f.detail)}</b> koluna ekledi`,
+    family_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini <b>${esc(f.detail)}</b> kolundan çıkardı`,
     gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
   };
   function nameOrLink(f) {
@@ -1448,6 +1493,43 @@ $("#tab-home").addEventListener("click", (e) => {
   switchTab("people");
   selectPerson(Number(el.dataset.person));
 });
+
+/* ---- Aile kümeleri ---- */
+async function openFamilies(focusId) {
+  switchTab("families");
+  updateHash(focusId ? { tab: "families", fam: focusId } : { tab: "families" });
+  const box = $("#families-content");
+  box.innerHTML = '<p class="muted">Yükleniyor…</p>';
+  let d;
+  try { d = await api("/api/families"); }
+  catch (_) { box.innerHTML = '<p class="error">Yüklenemedi.</p>'; return; }
+  if (!d.items.length) {
+    box.innerHTML = '<p class="muted">Henüz aile kolu yok. Bir kişinin detayında "Aile Kolları"ndan ekleyebilirsiniz.</p>';
+    return;
+  }
+  box.innerHTML = `<div class="fam-grid">${d.items.map((f) => `
+    <button class="fam-card" data-fam="${f.id}">
+      <span class="fam-name">${esc(f.name)}</span>
+      <span class="fam-count">${f.count} kişi</span>
+    </button>`).join("")}</div>
+    <div id="fam-members"></div>`;
+  box.querySelectorAll("[data-fam]").forEach((b) =>
+    b.addEventListener("click", () => showFamilyMembers(Number(b.dataset.fam))));
+  if (focusId) showFamilyMembers(focusId);
+}
+
+async function showFamilyMembers(id) {
+  const box = $("#fam-members");
+  box.querySelectorAll && box.classList.add("loading");
+  const d = await api(`/api/families/${id}`);
+  $$("#families-content [data-fam]").forEach((b) =>
+    b.classList.toggle("active", Number(b.dataset.fam) === id));
+  box.innerHTML = `<h2 class="fam-title">${esc(d.name)} — ${d.members.length} kişi</h2>
+    <div class="chips">${d.members.map((p) =>
+      `<span class="chip" data-person="${p.id}">${esc(p.name)}</span>`).join("") || '<span class="muted">Üye yok</span>'}</div>`;
+  box.querySelectorAll("[data-person]").forEach((el) =>
+    el.addEventListener("click", () => { switchTab("people"); selectPerson(Number(el.dataset.person)); }));
+}
 
 /* ---- Liste sayfaları (evlilikler / anekdotlar / fotoğraflar) ---- */
 async function openListPage(kind, item) {

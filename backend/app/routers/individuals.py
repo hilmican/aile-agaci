@@ -2,16 +2,20 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..activity import log_activity
 from ..config import settings
 from ..database import get_db
-from ..models import Anecdote, Individual, Media, ParentChild, Residence, Spouse
+from ..models import (
+    Anecdote, Family, Individual, IndividualFamily, Media, ParentChild, Residence, Spouse,
+)
 from ..schemas import (
     AnecdoteCreate,
     AnecdoteOut,
+    FamilyAdd,
+    FamilyOut,
     IndividualCreate,
     IndividualDetail,
     IndividualSummary,
@@ -84,6 +88,11 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
     res = db.scalars(select(Residence).where(Residence.individual_id == ind.id)).all()
     res.sort(key=lambda r: (r.year_from if r.year_from is not None else 9999, r.id))
     detail.residences = [ResidenceOut.model_validate(r) for r in res]
+    fam_ids = db.scalars(
+        select(IndividualFamily.family_id).where(IndividualFamily.individual_id == ind.id)
+    ).all()
+    fams = db.scalars(select(Family).where(Family.id.in_(fam_ids))).all() if fam_ids else []
+    detail.families = [FamilyOut.model_validate(f) for f in sorted(fams, key=lambda x: x.name.lower())]
     return detail
 
 
@@ -638,6 +647,54 @@ def add_residence(
     db.commit()
     db.refresh(res)
     return ResidenceOut.model_validate(res)
+
+
+# ---- Aile kolları (çoklu) ----
+@router.post("/{ind_id}/families", response_model=FamilyOut, status_code=201)
+def add_family(
+    ind_id: int,
+    payload: FamilyAdd,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    ind = db.get(Individual, ind_id)
+    if ind is None:
+        raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Aile adı boş olamaz")
+    # Bul-veya-oluştur (büyük/küçük harf duyarsız).
+    fam = db.scalar(select(Family).where(func.lower(Family.name) == name.lower()))
+    if fam is None:
+        fam = Family(name=name)
+        db.add(fam)
+        db.flush()
+    link = db.scalar(select(IndividualFamily).where(
+        IndividualFamily.individual_id == ind.id, IndividualFamily.family_id == fam.id))
+    if link is None:
+        db.add(IndividualFamily(individual_id=ind.id, family_id=fam.id))
+        log_activity(db, user, "family_added", ind, fam.name)
+    db.commit()
+    db.refresh(fam)
+    return FamilyOut.model_validate(fam)
+
+
+@router.delete("/{ind_id}/families/{family_id}", status_code=204)
+def remove_family(
+    ind_id: int,
+    family_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    link = db.scalar(select(IndividualFamily).where(
+        IndividualFamily.individual_id == ind_id, IndividualFamily.family_id == family_id))
+    if link is not None:
+        db.delete(link)
+        ind = db.get(Individual, ind_id)
+        fam = db.get(Family, family_id)
+        if ind is not None:
+            log_activity(db, user, "family_removed", ind, fam.name if fam else "")
+    db.commit()
 
 
 @router.delete("/{ind_id}/residences/{residence_id}", status_code=204)
