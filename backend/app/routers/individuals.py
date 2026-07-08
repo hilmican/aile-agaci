@@ -353,6 +353,7 @@ def pedigree(
             "name": f"{ind.first_name} {ind.last_name}".strip() or "(isimsiz)",
             "sex": ind.sex,
             "birth_date": ind.birth_date,
+            "birth_place": ind.birth_place,
             "death_date": ind.death_date,
             "photo": f"/uploads/{ind.media[0].filename}" if ind.media else None,
         }

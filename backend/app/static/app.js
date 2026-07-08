@@ -1193,9 +1193,13 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
     .attr("class", "dates").attr("x", TEXT_X).attr("y", 18)
     .text((c) => truncate(datesLabel(c.data), 24));
 
-  // Tam isim + tarihler tarayıcı tooltip'i olarak.
+  // Tam isim + tarihler + doğum yeri tarayıcı tooltip'i olarak.
   card.append("title")
-    .text((c) => [c.data.name, datesLabel(c.data)].filter(Boolean).join("\n"));
+    .text((c) => {
+      const bp = (c.data.birth_place || "").trim();
+      return [c.data.name, datesLabel(c.data), bp ? `📍 ${bp}` : ""]
+        .filter(Boolean).join("\n");
+    });
 
   // MyHeritage tarzı "ağacını göster": odağı bu kişiye taşır.
   const jump = card.filter((c) => !c.focus)
