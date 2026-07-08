@@ -180,24 +180,28 @@ def timeline(db: Session = Depends(get_db), _: User = Depends(get_current_user))
         birth_y = _year(ind.birth_date)
         death_y = _year(ind.death_date)
 
-        # (yıl, yer) noktaları
-        points: list[tuple[int, str]] = []
-        if birth_y and ind.birth_place:
-            points.append((birth_y, ind.birth_place))
+        # (yıl, yer, saklı_koordinat) noktaları. Saklı koordinat varsa geocode
+        # tablosuna düşmeden onu kullan (Nominatim ile seçilen kesin konum).
+        points: list[tuple[int, str, tuple[float, float] | None]] = []
+        if birth_y and (ind.birth_place or ind.birth_lat is not None):
+            coord = (ind.birth_lat, ind.birth_lng) if ind.birth_lat is not None else None
+            points.append((birth_y, ind.birth_place, coord))
         for r in residences.get(ind.id, []):
             yr = r.year_from or _year(r.start)
-            if yr and r.place:
-                points.append((yr, r.place))
-        if death_y and ind.death_place:
-            points.append((death_y, ind.death_place))
+            if yr and (r.place or r.lat is not None):
+                coord = (r.lat, r.lng) if r.lat is not None else None
+                points.append((yr, r.place, coord))
+        if death_y and (ind.death_place or ind.death_lat is not None):
+            coord = (ind.death_lat, ind.death_lng) if ind.death_lat is not None else None
+            points.append((death_y, ind.death_place, coord))
 
-        # Geocode + sırala
+        # Koordinat çöz (saklı > geocode tablosu) + sırala
         resolved: list[tuple[int, float, float]] = []
-        for yr, place in sorted(points):
-            gc = geocode(place)
+        for yr, place, coord in sorted(points, key=lambda x: x[0]):
+            gc = coord or geocode(place)
             if gc:
                 resolved.append((yr, gc[0], gc[1]))
-            else:
+            elif place:
                 unresolved.add(place.split("/")[0].strip())
         if not resolved:
             continue

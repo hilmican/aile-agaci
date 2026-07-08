@@ -36,8 +36,12 @@ class Individual(Base):
     sex: Mapped[str] = mapped_column(String(1), default="U")  # M | F | U
     birth_date: Mapped[str] = mapped_column(String(100), default="")
     birth_place: Mapped[str] = mapped_column(String(255), default="")
+    birth_lat: Mapped[float | None] = mapped_column(nullable=True)
+    birth_lng: Mapped[float | None] = mapped_column(nullable=True)
     death_date: Mapped[str] = mapped_column(String(100), default="")
     death_place: Mapped[str] = mapped_column(String(255), default="")
+    death_lat: Mapped[float | None] = mapped_column(nullable=True)
+    death_lng: Mapped[float | None] = mapped_column(nullable=True)
     occupation: Mapped[str] = mapped_column(String(255), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     # İletişim bilgileri (yaşayanlar için pratik erişim)
@@ -114,6 +118,8 @@ class Residence(Base):
         ForeignKey("individuals.id", ondelete="CASCADE"), index=True
     )
     place: Mapped[str] = mapped_column(String(255), default="")
+    lat: Mapped[float | None] = mapped_column(nullable=True)
+    lng: Mapped[float | None] = mapped_column(nullable=True)
     start: Mapped[str] = mapped_column("period_start", String(100), default="")
     end: Mapped[str] = mapped_column("period_end", String(100), default="")
     year_from: Mapped[int | None] = mapped_column(nullable=True)  # sıralama anahtarı

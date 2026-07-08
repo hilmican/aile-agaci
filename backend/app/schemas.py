@@ -46,6 +46,10 @@ class IndividualBase(BaseModel):
     phone: str = ""
     email: str = ""
     address: str = ""
+    birth_lat: float | None = None
+    birth_lng: float | None = None
+    death_lat: float | None = None
+    death_lng: float | None = None
 
 
 class IndividualCreate(IndividualBase):
@@ -66,6 +70,10 @@ class IndividualUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     address: str | None = None
+    birth_lat: float | None = None
+    birth_lng: float | None = None
+    death_lat: float | None = None
+    death_lng: float | None = None
 
 
 class MediaOut(BaseModel):
@@ -116,6 +124,8 @@ class ResidenceCreate(BaseModel):
     start: str = ""
     end: str = ""
     note: str = ""
+    lat: float | None = None
+    lng: float | None = None
 
 
 class ResidenceOut(BaseModel):
@@ -127,6 +137,8 @@ class ResidenceOut(BaseModel):
     end: str = ""
     note: str = ""
     year_from: int | None = None
+    lat: float | None = None
+    lng: float | None = None
 
 
 class FamilyOut(BaseModel):

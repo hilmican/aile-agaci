@@ -183,7 +183,12 @@ async function applyHash() {
   }
   if (tab === "people" && h.get("person")) {
     switchTab("people");
-    try { await selectPerson(Number(h.get("person"))); } catch (_) {}
+    try {
+      await selectPerson(Number(h.get("person")));
+      if (h.get("edit") === "1" && canEdit()) {
+        renderEditForm(await api("/api/individuals/" + Number(h.get("person"))));
+      }
+    } catch (_) {}
     return true;
   }
   if (tab === "list" && h.get("kind")) {
@@ -343,6 +348,8 @@ function renderDetail(p) {
         toast("Anekdot silindi");
         selectPerson(p.id);
       }));
+    let resPick = null;
+    if ($("#res-place")) attachPlaceAutocomplete($("#res-place"), (pk) => { resPick = pk; });
     $("#res-add").addEventListener("click", async () => {
       const place = $("#res-place").value.trim();
       if (!place) return toast("Yer boş olamaz", true);
@@ -353,6 +360,8 @@ function renderDetail(p) {
           start: $("#res-start").value.trim(),
           end: $("#res-end").value.trim(),
           note: $("#res-note").value.trim(),
+          lat: resPick ? resPick.lat : null,
+          lng: resPick ? resPick.lon : null,
         },
       });
       toast("Yaşam yeri eklendi");
@@ -663,9 +672,19 @@ const PERSON_FIELDS = [
   ["phone", "Telefon"], ["email", "E-posta"], ["address", "Adres"],
 ];
 
+// Konum alanları: yer inputuna Nominatim autocomplete + gizli enlem/boylam.
+const PLACE_KEYS = { birth_place: "birth", death_place: "death" };
+
 function personForm(p = {}) {
-  const inputs = PERSON_FIELDS.map(([k, label]) =>
-    `<label>${esc(label)}<input name="${k}" value="${esc(p[k] || "")}" /></label>`).join("");
+  const inputs = PERSON_FIELDS.map(([k, label]) => {
+    if (PLACE_KEYS[k]) {
+      return `<label>${esc(label)}
+        <input name="${k}" value="${esc(p[k] || "")}" data-place="${PLACE_KEYS[k]}" autocomplete="off" /></label>`;
+    }
+    return `<label>${esc(label)}<input name="${k}" value="${esc(p[k] || "")}" /></label>`;
+  }).join("");
+  const coordHidden = ["birth_lat", "birth_lng", "death_lat", "death_lng"]
+    .map((k) => `<input type="hidden" name="${k}" value="${p[k] ?? ""}" />`).join("");
   return `<form id="person-form">
     <div class="detail-grid">
       <label>Cinsiyet<select name="sex">
@@ -675,6 +694,7 @@ function personForm(p = {}) {
       </select></label>
       ${inputs}
     </div>
+    ${coordHidden}
     <label>Notlar<textarea name="notes" rows="3">${esc(p.notes || "")}</textarea></label>
     <div class="detail-actions" style="margin-top:1rem">
       <button type="submit">Kaydet</button>
@@ -683,11 +703,23 @@ function personForm(p = {}) {
   </form>`;
 }
 
+// personForm'daki yer inputlarına autocomplete bağla; seçilince gizli koordinatı doldur.
+function wirePlaceInputs(form) {
+  form.querySelectorAll("[data-place]").forEach((input) => {
+    const key = input.dataset.place; // birth | death
+    attachPlaceAutocomplete(input, (pick) => {
+      form.querySelector(`[name="${key}_lat"]`).value = pick ? pick.lat : "";
+      form.querySelector(`[name="${key}_lng"]`).value = pick ? pick.lon : "";
+    });
+  });
+}
+
 function startAddPerson() {
   if (!canEdit()) return;
   state.selectedId = null;
   const el = $("#person-detail");
   el.innerHTML = `<h2>Yeni Kişi</h2>${personForm()}`;
+  wirePlaceInputs($("#person-form"));
   $("#cancel-edit").addEventListener("click", () => (el.innerHTML = '<p class="muted center">Soldan bir kişi seçin.</p>'));
   $("#person-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -702,6 +734,7 @@ function startAddPerson() {
 function renderEditForm(p) {
   const el = $("#person-detail");
   el.innerHTML = `<h2>Düzenle: ${esc(fullName(p))}</h2>${personForm(p)}`;
+  wirePlaceInputs($("#person-form"));
   $("#cancel-edit").addEventListener("click", () => selectPerson(p.id));
   $("#person-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -716,7 +749,51 @@ function renderEditForm(p) {
 function formToObject(form) {
   const obj = {};
   new FormData(form).forEach((v, k) => (obj[k] = v));
+  // Koordinat alanları: boş -> null, dolu -> sayı.
+  ["birth_lat", "birth_lng", "death_lat", "death_lng"].forEach((k) => {
+    if (k in obj) obj[k] = obj[k] === "" ? null : Number(obj[k]);
+  });
   return obj;
+}
+
+/* ---- Yer otomatik tamamlama (OpenStreetMap Nominatim) ---- */
+function attachPlaceAutocomplete(input, onPick) {
+  const wrap = document.createElement("div");
+  wrap.className = "combo place-ac";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const list = document.createElement("div");
+  list.className = "combo-list hidden";
+  wrap.appendChild(list);
+  let timer = null;
+
+  input.addEventListener("input", () => {
+    onPick(null); // elle yazınca eski koordinatı düşür (yeniden seçilmeli)
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 3) { list.classList.add("hidden"); return; }
+    timer = setTimeout(async () => {
+      list.innerHTML = '<div class="combo-empty">Aranıyor…</div>';
+      list.classList.remove("hidden");
+      try {
+        const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6"
+          + "&accept-language=tr&q=" + encodeURIComponent(q);
+        const data = await (await fetch(url, { headers: { Accept: "application/json" } })).json();
+        list.innerHTML = data.length
+          ? data.map((d) => `<div class="combo-item" data-lat="${d.lat}" data-lon="${d.lon}"
+              data-name="${esc(d.display_name)}">${esc(d.display_name)}</div>`).join("")
+          : '<div class="combo-empty">Sonuç yok</div>';
+      } catch (_) { list.innerHTML = '<div class="combo-empty">Arama başarısız</div>'; }
+    }, 500);
+  });
+  list.addEventListener("mousedown", (e) => {
+    const it = e.target.closest(".combo-item");
+    if (!it || !it.dataset.lat) return;
+    input.value = it.dataset.name;
+    list.classList.add("hidden");
+    onPick({ lat: Number(it.dataset.lat), lon: Number(it.dataset.lon), name: it.dataset.name });
+  });
+  input.addEventListener("blur", () => setTimeout(() => list.classList.add("hidden"), 200));
 }
 
 async function deletePerson(id) {
@@ -1555,9 +1632,12 @@ function drawMapYear(year) {
     if (!s) return;
     const [dy, dx] = jitter(p.id);
     const color = p.sex === "M" ? "#5b9bd1" : p.sex === "F" ? "#dd8ba1" : "#8a8577";
+    const edit = canEdit()
+      ? `<br><a href="#tab=people&person=${p.id}&edit=1" target="_blank" rel="noopener">✏️ Düzenle</a>` : "";
     L.circleMarker([s.lat + dy, s.lng + dx], {
       radius: 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.85,
-    }).bindPopup(`<b>${esc(p.name)}</b>`).addTo(mapLayer);
+    }).bindPopup(`<b>${esc(p.name)}</b>
+      <br><a href="#tab=people&person=${p.id}" target="_blank" rel="noopener">Profili aç</a>${edit}`).addTo(mapLayer);
     n++;
   });
   $("#map-year-label").textContent = year;

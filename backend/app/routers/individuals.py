@@ -647,6 +647,8 @@ def add_residence(
         end=end,
         year_from=_year_from_period(start or end),
         note=payload.note.strip(),
+        lat=payload.lat,
+        lng=payload.lng,
     )
     db.add(res)
     span = f"{start} – {end or 'halen'}".strip(" –") if (start or end) else ""
