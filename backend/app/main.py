@@ -77,6 +77,7 @@ def ensure_schema() -> None:
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS birth_lng DOUBLE PRECISION",
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS death_lat DOUBLE PRECISION",
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS death_lng DOUBLE PRECISION",
+        "ALTER TABLE families ADD COLUMN IF NOT EXISTS emblem VARCHAR(40) NOT NULL DEFAULT ''",
         # Eski serbest 'period' değerini başlangıç sütununa taşı (yalnız boşsa).
         "UPDATE residences SET period_start = period WHERE period_start = '' AND period <> ''",
     ]

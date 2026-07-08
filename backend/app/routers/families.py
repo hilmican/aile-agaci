@@ -1,13 +1,18 @@
 """Aile kümeleri (kollar): liste, üyeler, otomatik tamamlama."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Family, Individual, IndividualFamily, ParentChild, Spouse, User
-from ..security import get_current_user
+from ..security import get_current_user, require_editor
 
 router = APIRouter(prefix="/api/families", tags=["families"])
+
+
+class FamilyEmblem(BaseModel):
+    emblem: str = ""
 
 
 def _person_ref(ind: Individual) -> dict:
@@ -67,19 +72,35 @@ def list_families(db: Session = Depends(get_db), _: User = Depends(get_current_u
     """Tüm kollar, hesaplanmış üye sayısıyla (çoktan aza)."""
     memberships = compute_memberships(db)
     fams = db.scalars(select(Family)).all()
-    items = [{"id": f.id, "name": f.name, "count": len(memberships.get(f.id, {}))} for f in fams]
+    items = [{"id": f.id, "name": f.name, "emblem": f.emblem,
+              "count": len(memberships.get(f.id, {}))} for f in fams]
     items.sort(key=lambda x: (-x["count"], x["name"].lower()))
     return {"items": items}
+
+
+@router.patch("/{family_id}")
+def set_emblem(
+    family_id: int,
+    payload: FamilyEmblem,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    fam = db.get(Family, family_id)
+    if fam is None:
+        raise HTTPException(status_code=404, detail="Aile bulunamadı")
+    fam.emblem = (payload.emblem or "").strip()[:40]
+    db.commit()
+    return {"id": fam.id, "name": fam.name, "emblem": fam.emblem}
 
 
 @router.get("/{family_id}")
 def family_members(family_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     fam = db.get(Family, family_id)
     if fam is None:
-        return {"id": family_id, "name": "", "members": []}
+        return {"id": family_id, "name": "", "emblem": "", "members": []}
     membs = compute_memberships(db).get(family_id, {})
     people = db.scalars(select(Individual).where(Individual.id.in_(membs.keys()))).all() if membs else []
     order = {"tagged": 0, "inherited": 1, "marriage": 2}
     people.sort(key=lambda p: (order.get(membs.get(p.id), 3), p.last_name, p.first_name))
     members = [dict(_person_ref(p), kind=membs.get(p.id, "inherited")) for p in people]
-    return {"id": fam.id, "name": fam.name, "members": members}
+    return {"id": fam.id, "name": fam.name, "emblem": fam.emblem, "members": members}

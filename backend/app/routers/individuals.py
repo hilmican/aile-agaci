@@ -97,8 +97,8 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
             fam = db.get(Family, fid)
             if fam:
                 kind = membs[ind.id]
-                fam_here.append(FamilyOut(id=fam.id, name=fam.name, kind=kind,
-                                          removable=(kind == "tagged")))
+                fam_here.append(FamilyOut(id=fam.id, name=fam.name, emblem=fam.emblem,
+                                          kind=kind, removable=(kind == "tagged")))
     fam_here.sort(key=lambda f: (0 if f.kind == "tagged" else 1, f.name.lower()))
     detail.families = fam_here
     return detail

@@ -145,6 +145,7 @@ class FamilyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    emblem: str = ""
     kind: str = "tagged"       # tagged | inherited | marriage
     removable: bool = True     # yalnız açıkça etiketlenen kaldırılabilir
 

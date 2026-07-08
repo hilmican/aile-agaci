@@ -278,7 +278,8 @@ function renderDetail(p) {
         const tag = f.kind === "inherited" ? '<span class="fam-kind">baba tarafı</span>'
           : f.kind === "marriage" ? '<span class="fam-kind">evlilik</span>' : "";
         const del = (canEdit() && f.removable) ? `<span class="x" data-fam-del="${f.id}" title="Kaldır">×</span>` : "";
-        return `<span class="chip fam-chip ${esc(f.kind)}" data-fam-go="${f.id}">${esc(f.name)} ${tag} ${del}</span>`;
+        const em = f.emblem ? `<span class="fam-emblem-sm">${emblemSvg(f.emblem)}</span>` : "";
+        return `<span class="chip fam-chip ${esc(f.kind)}" data-fam-go="${f.id}">${em}${esc(f.name)} ${tag} ${del}</span>`;
       }).join("") || '<span class="muted">—</span>'}</div>
       ${canEdit() ? `<div class="inline-form">
         <input type="text" id="fam-input" list="fam-datalist" placeholder="Aile kolu (örn. Vasiloğulları)" />
@@ -1660,6 +1661,30 @@ function toggleMapPlay() {
   }, 350);
 }
 
+/* ---- Aile armaları (Türk-İslam motifleri) ---- */
+// Tümü currentColor kullanır; tema rengine uyar. viewBox 0 0 100 100.
+const EMBLEMS = {
+  hilal: { name: "Hilal", svg: `<path d="M64 15a35 35 0 1 0 0 70 28 28 0 0 1 0-70z"/>` },
+  ayyildiz: { name: "Ay-Yıldız", svg: `<path d="M58 15a35 35 0 1 0 0 70 28 28 0 0 1 0-70z"/><path d="M76 38l4 11 11 .3-8.8 6.7 3.2 10.6L77 70l-8.6 6.6 3.2-10.6L62.6 59l11-.3z"/>` },
+  selcuklu: { name: "Selçuklu Yıldızı", svg: `<g fill="none" stroke="currentColor" stroke-width="6"><rect x="26" y="26" width="48" height="48"/><rect x="26" y="26" width="48" height="48" transform="rotate(45 50 50)"/></g>` },
+  rubelhizb: { name: "Rub'el Hizb", svg: `<rect x="28" y="28" width="44" height="44"/><rect x="28" y="28" width="44" height="44" transform="rotate(45 50 50)"/><circle cx="50" cy="50" r="7" fill="var(--panel,#fff)"/>` },
+  lale: { name: "Lale", svg: `<path d="M50 88c0-14-2-30-2-30M50 58c-10 0-18-10-18-24 6 4 12 4 18 10 6-6 12-6 18-10 0 14-8 24-18 24z"/><path d="M32 34c-2 10 4 20 18 24 14-4 20-14 18-24" fill="none" stroke="currentColor" stroke-width="4"/>` },
+  yildiz8: { name: "Sekiz Köşeli Yıldız", svg: `<path d="M50 10l9 22 22-9-9 22 22 9-22 9 9 22-22-9-9 22-9-22-22 9 9-22-22-9 22-9-9-22 22 9z"/>` },
+  kilic: { name: "Çapraz Kılıç", svg: `<g stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"><path d="M25 78L72 26"/><path d="M75 78L28 26"/></g><path d="M50 52l6 6-6 6-6-6z"/>` },
+  gul: { name: "Gül", svg: `<g fill="none" stroke="currentColor" stroke-width="5"><circle cx="50" cy="50" r="10"/><circle cx="50" cy="30" r="12"/><circle cx="50" cy="70" r="12"/><circle cx="30" cy="50" r="12"/><circle cx="70" cy="50" r="12"/></g>` },
+  servi: { name: "Servi Ağacı", svg: `<path d="M50 12c-10 14-14 30-14 46 0 12 4 20 14 26 10-6 14-14 14-26 0-16-4-32-14-46z"/><rect x="46" y="80" width="8" height="10"/>` },
+  kubbe: { name: "Kubbe ve Hilal", svg: `<path d="M50 20c14 0 24 14 24 30H26c0-16 10-30 24-30z"/><rect x="26" y="52" width="48" height="30"/><path d="M50 6a10 10 0 1 0 0 14 8 8 0 0 1 0-14z"/>` },
+  pusula: { name: "Yıldız Pusula", svg: `<path d="M50 8l8 34 34 8-34 8-8 34-8-34-34-8 34-8z" opacity=".85"/><circle cx="50" cy="50" r="6" fill="var(--panel,#fff)"/>` },
+  kartal: { name: "Çift Başlı Kartal", svg: `<path d="M50 40c-6-10-16-16-28-16 4 8 2 14-4 18 8 2 12 6 12 14 0 10 8 18 20 22 12-4 20-12 20-22 0-8 4-12 12-14-6-4-8-10-4-18-12 0-22 6-28 16z"/><circle cx="34" cy="30" r="3"/><circle cx="66" cy="30" r="3"/>` },
+};
+const EMBLEM_DEFAULT = `<path d="M50 12l30 10v24c0 22-14 34-30 42-16-8-30-20-30-42V22z" fill="none" stroke="currentColor" stroke-width="4" opacity=".4"/>`;
+
+function emblemSvg(key, cls = "") {
+  const e = EMBLEMS[key];
+  const inner = e ? e.svg : EMBLEM_DEFAULT;
+  return `<svg class="emblem ${cls}" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true">${inner}</svg>`;
+}
+
 /* ---- Aile kümeleri ---- */
 async function openFamilies(focusId) {
   switchTab("families");
@@ -1674,14 +1699,54 @@ async function openFamilies(focusId) {
     return;
   }
   box.innerHTML = `<div class="fam-grid">${d.items.map((f) => `
-    <button class="fam-card" data-fam="${f.id}">
+    <div class="fam-card" data-fam="${f.id}">
+      <span class="fam-emblem">${emblemSvg(f.emblem)}</span>
       <span class="fam-name">${esc(f.name)}</span>
       <span class="fam-count">${f.count} kişi</span>
-    </button>`).join("")}</div>
+      ${canEdit() ? `<button class="small ghost fam-emblem-btn" data-emblem-for="${f.id}">Arma seç</button>` : ""}
+    </div>`).join("")}</div>
     <div id="fam-members"></div>`;
   box.querySelectorAll("[data-fam]").forEach((b) =>
-    b.addEventListener("click", () => showFamilyMembers(Number(b.dataset.fam))));
+    b.addEventListener("click", (e) => {
+      if (e.target.closest("[data-emblem-for]")) return;
+      showFamilyMembers(Number(b.dataset.fam));
+    }));
+  box.querySelectorAll("[data-emblem-for]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEmblemPicker(Number(b.dataset.emblemFor));
+    }));
   if (focusId) showFamilyMembers(focusId);
+}
+
+// Arma seçici overlay
+function openEmblemPicker(familyId) {
+  let ov = $("#emblem-picker");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "emblem-picker";
+    ov.className = "modal-backdrop hidden";
+    ov.innerHTML = `<div class="emblem-modal">
+      <div class="modal-head"><h2>Arma Seç</h2><button id="emblem-close" class="ghost">✕</button></div>
+      <div class="emblem-grid" id="emblem-grid"></div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); });
+    $("#emblem-close").addEventListener("click", () => ov.classList.add("hidden"));
+  }
+  const grid = $("#emblem-grid");
+  const cells = [`<button class="emblem-cell" data-key="">${emblemSvg("")}<span>Yok</span></button>`]
+    .concat(Object.entries(EMBLEMS).map(([k, e]) =>
+      `<button class="emblem-cell" data-key="${k}">${emblemSvg(k)}<span>${esc(e.name)}</span></button>`));
+  grid.innerHTML = cells.join("");
+  grid.querySelectorAll(".emblem-cell").forEach((c) =>
+    c.addEventListener("click", async () => {
+      await api(`/api/families/${familyId}`, { method: "PATCH", json: { emblem: c.dataset.key } });
+      ov.classList.add("hidden");
+      toast("Arma güncellendi");
+      openFamilies(familyId);
+    }));
+  ov.classList.remove("hidden");
 }
 
 async function showFamilyMembers(id) {
@@ -1691,7 +1756,7 @@ async function showFamilyMembers(id) {
   $$("#families-content [data-fam]").forEach((b) =>
     b.classList.toggle("active", Number(b.dataset.fam) === id));
   const kindTr = { tagged: "", inherited: "baba tarafı", marriage: "evlilik" };
-  box.innerHTML = `<h2 class="fam-title">${esc(d.name)} — ${d.members.length} kişi</h2>
+  box.innerHTML = `<h2 class="fam-title"><span class="fam-emblem-lg">${emblemSvg(d.emblem)}</span> ${esc(d.name)} — ${d.members.length} kişi</h2>
     <p class="muted fam-legend">Etiketli · <span class="fam-kind">baba tarafı</span> (soydan) · <span class="fam-kind">evlilik</span></p>
     <div class="chips">${d.members.map((p) => {
       const t = kindTr[p.kind] ? ` <span class="fam-kind">${kindTr[p.kind]}</span>` : "";
