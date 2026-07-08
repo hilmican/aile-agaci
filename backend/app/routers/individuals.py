@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models import (
     Anecdote, Family, Individual, IndividualFamily, Media, ParentChild, Residence, Spouse,
 )
+from .families import compute_memberships
 from ..schemas import (
     AnecdoteCreate,
     AnecdoteOut,
@@ -88,11 +89,18 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
     res = db.scalars(select(Residence).where(Residence.individual_id == ind.id)).all()
     res.sort(key=lambda r: (r.year_from if r.year_from is not None else 9999, r.id))
     detail.residences = [ResidenceOut.model_validate(r) for r in res]
-    fam_ids = db.scalars(
-        select(IndividualFamily.family_id).where(IndividualFamily.individual_id == ind.id)
-    ).all()
-    fams = db.scalars(select(Family).where(Family.id.in_(fam_ids))).all() if fam_ids else []
-    detail.families = [FamilyOut.model_validate(f) for f in sorted(fams, key=lambda x: x.name.lower())]
+    # Aile kolları: açık etiket + baba soyundan miras + evlilikle katılım.
+    memberships = compute_memberships(db)
+    fam_here = []
+    for fid, membs in memberships.items():
+        if ind.id in membs:
+            fam = db.get(Family, fid)
+            if fam:
+                kind = membs[ind.id]
+                fam_here.append(FamilyOut(id=fam.id, name=fam.name, kind=kind,
+                                          removable=(kind == "tagged")))
+    fam_here.sort(key=lambda f: (0 if f.kind == "tagged" else 1, f.name.lower()))
+    detail.families = fam_here
     return detail
 
 

@@ -202,6 +202,10 @@ label input, label select { color: var(--ink); }
 
 /* Aile kolları */
 .fam-chip { background: #6a5acd18; border-color: #6a5acd55; }
+.fam-chip.inherited { background: #6a5acd0d; border-style: dashed; }
+.fam-chip.marriage { background: #dd8ba116; border-color: #dd8ba155; }
+.fam-kind { font-size: 0.66rem; color: var(--muted); background: #00000010; padding: 0 0.3rem; border-radius: 6px; }
+.fam-legend { font-size: 0.75rem; margin: 0 0 0.6rem; }
 .fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.7rem; margin-bottom: 1.2rem; }
 .fam-card { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; text-align: left; }
 .fam-card:hover { border-color: #6a5acd; }

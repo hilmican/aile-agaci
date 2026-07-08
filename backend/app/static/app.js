@@ -269,10 +269,12 @@ function renderDetail(p) {
 
     <div class="rel-section">
       <h3>Aile Kolları</h3>
-      <div class="rel-chips">${(p.families || []).map((f) =>
-        `<span class="chip fam-chip" data-fam-go="${f.id}">${esc(f.name)}
-          ${canEdit() ? `<span class="x" data-fam-del="${f.id}" title="Kaldır">×</span>` : ""}</span>`
-      ).join("") || '<span class="muted">—</span>'}</div>
+      <div class="rel-chips">${(p.families || []).map((f) => {
+        const tag = f.kind === "inherited" ? '<span class="fam-kind">baba tarafı</span>'
+          : f.kind === "marriage" ? '<span class="fam-kind">evlilik</span>' : "";
+        const del = (canEdit() && f.removable) ? `<span class="x" data-fam-del="${f.id}" title="Kaldır">×</span>` : "";
+        return `<span class="chip fam-chip ${esc(f.kind)}" data-fam-go="${f.id}">${esc(f.name)} ${tag} ${del}</span>`;
+      }).join("") || '<span class="muted">—</span>'}</div>
       ${canEdit() ? `<div class="inline-form">
         <input type="text" id="fam-input" list="fam-datalist" placeholder="Aile kolu (örn. Vasiloğulları)" />
         <datalist id="fam-datalist"></datalist>
@@ -1608,9 +1610,13 @@ async function showFamilyMembers(id) {
   const d = await api(`/api/families/${id}`);
   $$("#families-content [data-fam]").forEach((b) =>
     b.classList.toggle("active", Number(b.dataset.fam) === id));
+  const kindTr = { tagged: "", inherited: "baba tarafı", marriage: "evlilik" };
   box.innerHTML = `<h2 class="fam-title">${esc(d.name)} — ${d.members.length} kişi</h2>
-    <div class="chips">${d.members.map((p) =>
-      `<span class="chip" data-person="${p.id}">${esc(p.name)}</span>`).join("") || '<span class="muted">Üye yok</span>'}</div>`;
+    <p class="muted fam-legend">Etiketli · <span class="fam-kind">baba tarafı</span> (soydan) · <span class="fam-kind">evlilik</span></p>
+    <div class="chips">${d.members.map((p) => {
+      const t = kindTr[p.kind] ? ` <span class="fam-kind">${kindTr[p.kind]}</span>` : "";
+      return `<span class="chip fam-chip ${esc(p.kind || "")}" data-person="${p.id}">${esc(p.name)}${t}</span>`;
+    }).join("") || '<span class="muted">Üye yok</span>'}</div>`;
   box.querySelectorAll("[data-person]").forEach((el) =>
     el.addEventListener("click", () => { switchTab("people"); selectPerson(Number(el.dataset.person)); }));
 }
