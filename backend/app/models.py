@@ -92,7 +92,7 @@ class Family(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
-    emblem: Mapped[str] = mapped_column(String(40), default="")  # arma anahtarı
+    emblem: Mapped[str] = mapped_column(String(120), default="")  # arma anahtarı veya custom:<dosya>
 
 
 class IndividualFamily(Base):

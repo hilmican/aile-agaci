@@ -1,12 +1,18 @@
 """Aile kümeleri (kollar): liste, üyeler, otomatik tamamlama."""
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database import get_db
 from ..models import Family, Individual, IndividualFamily, ParentChild, Spouse, User
 from ..security import get_current_user, require_editor
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"}
 
 router = APIRouter(prefix="/api/families", tags=["families"])
 
@@ -88,7 +94,33 @@ def set_emblem(
     fam = db.get(Family, family_id)
     if fam is None:
         raise HTTPException(status_code=404, detail="Aile bulunamadı")
-    fam.emblem = (payload.emblem or "").strip()[:40]
+    fam.emblem = (payload.emblem or "").strip()[:120]
+    db.commit()
+    return {"id": fam.id, "name": fam.name, "emblem": fam.emblem}
+
+
+@router.post("/{family_id}/emblem-upload")
+async def upload_emblem(
+    family_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    """Özel arma görseli yükle; family.emblem = 'custom:<dosya>' olur."""
+    fam = db.get(Family, family_id)
+    if fam is None:
+        raise HTTPException(status_code=404, detail="Aile bulunamadı")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Yalnızca resim (PNG/JPG/SVG/…) yüklenebilir")
+    contents = await file.read()
+    if len(contents) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arma 3MB sınırını aşıyor")
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".png"
+    filename = f"emblem_{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(settings.upload_dir, filename), "wb") as fh:
+        fh.write(contents)
+    fam.emblem = f"custom:{filename}"
     db.commit()
     return {"id": fam.id, "name": fam.name, "emblem": fam.emblem}
 

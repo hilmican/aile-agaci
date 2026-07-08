@@ -222,11 +222,18 @@ label input, label select { color: var(--ink); }
 .fam-emblem-lg { display: inline-block; width: 34px; height: 34px; color: #6a5acd; }
 .fam-emblem-sm { display: inline-block; width: 15px; height: 15px; color: #6a5acd; vertical-align: -2px; margin-right: 2px; }
 .fam-emblem-btn { margin-top: 0.4rem; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 80; padding: 1rem; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 1.05rem; }
 .emblem-modal { background: var(--panel); border-radius: 12px; width: min(560px, 100%); max-height: 82vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
 .emblem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.6rem; padding: 1rem; overflow-y: auto; }
 .emblem-cell { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 0.7rem 0.3rem; background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 0.72rem; }
 .emblem-cell:hover { border-color: #6a5acd; background: #6a5acd10; }
 .emblem-cell .emblem { width: 40px; height: 40px; color: #6a5acd; }
+.emblem-img { object-fit: contain; }
+.emblem-upload { padding: 0 1rem 1rem; }
+.emblem-upload-label { display: inline-block; cursor: pointer; padding: 0.5rem 0.9rem; border: 1px dashed var(--border); border-radius: 8px; font-size: 0.85rem; color: var(--ink); }
+.emblem-upload-label:hover { border-color: #6a5acd; }
 
 /* Yaşadığı yerler — zaman çizelgesi */
 .res-timeline { list-style: none; margin: 0.3rem 0 0; padding: 0; }

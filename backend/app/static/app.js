@@ -1680,6 +1680,11 @@ const EMBLEMS = {
 const EMBLEM_DEFAULT = `<path d="M50 12l30 10v24c0 22-14 34-30 42-16-8-30-20-30-42V22z" fill="none" stroke="currentColor" stroke-width="4" opacity=".4"/>`;
 
 function emblemSvg(key, cls = "") {
+  // Özel yüklenmiş görsel: "custom:<dosya>"
+  if (typeof key === "string" && key.startsWith("custom:")) {
+    const file = key.slice(7);
+    return `<img class="emblem emblem-img ${cls}" src="/uploads/${esc(file)}" alt="arma" />`;
+  }
   const e = EMBLEMS[key];
   const inner = e ? e.svg : EMBLEM_DEFAULT;
   return `<svg class="emblem ${cls}" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true">${inner}</svg>`;
@@ -1729,11 +1734,17 @@ function openEmblemPicker(familyId) {
     ov.innerHTML = `<div class="emblem-modal">
       <div class="modal-head"><h2>Arma Seç</h2><button id="emblem-close" class="ghost">✕</button></div>
       <div class="emblem-grid" id="emblem-grid"></div>
+      <div class="emblem-upload">
+        <label class="emblem-upload-label">📁 Kendi armanı yükle (PNG/JPG/SVG)
+          <input type="file" id="emblem-file" accept="image/*,.svg" hidden />
+        </label>
+      </div>
     </div>`;
     document.body.appendChild(ov);
     ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); });
     $("#emblem-close").addEventListener("click", () => ov.classList.add("hidden"));
   }
+  ov.dataset.familyId = familyId;
   const grid = $("#emblem-grid");
   const cells = [`<button class="emblem-cell" data-key="">${emblemSvg("")}<span>Yok</span></button>`]
     .concat(Object.entries(EMBLEMS).map(([k, e]) =>
@@ -1741,11 +1752,24 @@ function openEmblemPicker(familyId) {
   grid.innerHTML = cells.join("");
   grid.querySelectorAll(".emblem-cell").forEach((c) =>
     c.addEventListener("click", async () => {
-      await api(`/api/families/${familyId}`, { method: "PATCH", json: { emblem: c.dataset.key } });
+      await api(`/api/families/${ov.dataset.familyId}`, { method: "PATCH", json: { emblem: c.dataset.key } });
       ov.classList.add("hidden");
       toast("Arma güncellendi");
-      openFamilies(familyId);
+      openFamilies(Number(ov.dataset.familyId));
     }));
+  const fileInput = $("#emblem-file");
+  fileInput.value = "";
+  fileInput.onchange = async () => {
+    if (!fileInput.files.length) return;
+    const fd = new FormData();
+    fd.append("file", fileInput.files[0]);
+    try {
+      await api(`/api/families/${ov.dataset.familyId}/emblem-upload`, { method: "POST", body: fd });
+      ov.classList.add("hidden");
+      toast("Arma yüklendi");
+      openFamilies(Number(ov.dataset.familyId));
+    } catch (err) { toast(err.message, true); }
+  };
   ov.classList.remove("hidden");
 }
 
