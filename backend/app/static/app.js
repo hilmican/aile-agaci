@@ -420,29 +420,108 @@ function spouseSection(spouses) {
   </div>`;
 }
 
+// Aramalı kişi seçici: yazınca tüm veritabanında arar, sonuçlarda doğum
+// tarihi ve (isim içindeki) lakap görünür. .el döner; getId() seçili id.
+function createPersonPicker({ exclude = [], placeholder = "Kişi ara…" } = {}) {
+  const excludeSet = new Set(exclude);
+  const wrap = document.createElement("div");
+  wrap.className = "combo person-picker";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = placeholder;
+  input.autocomplete = "off";
+  const list = document.createElement("div");
+  list.className = "combo-list hidden";
+  wrap.append(input, list);
+
+  let chosenId = null, pool = [], timer = null;
+
+  function draw(people) {
+    pool = people;
+    const items = people
+      .filter((p) => !excludeSet.has(p.id))
+      .sort((a, b) => personScore(b) - personScore(a) ||
+        fullName(a).localeCompare(fullName(b), "tr"))
+      .slice(0, 60);
+    list.innerHTML = items.map((p) => {
+      const s = personSub(p);
+      return `<div class="combo-item" data-id="${p.id}">
+        <div>${esc(fullName(p))}</div>${s ? `<div class="combo-sub">${esc(s)}</div>` : ""}</div>`;
+    }).join("") || '<div class="combo-empty">Sonuç yok</div>';
+    list.classList.remove("hidden");
+  }
+
+  async function search(q) {
+    const needle = q.trim();
+    if (!needle) return draw(state.people);
+    try { draw(await api("/api/individuals?q=" + encodeURIComponent(needle))); }
+    catch (_) {
+      draw(state.people.filter((p) => fullName(p).toLowerCase().includes(needle.toLowerCase())));
+    }
+  }
+
+  function pick(id) {
+    chosenId = id;
+    const p = pool.find((x) => x.id === id) || state.people.find((x) => x.id === id);
+    input.value = p ? fullName(p) : "";
+    list.classList.add("hidden");
+  }
+
+  input.addEventListener("input", () => {
+    chosenId = null;
+    clearTimeout(timer);
+    timer = setTimeout(() => search(input.value), 200);
+  });
+  input.addEventListener("focus", () => draw(state.people));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const first = list.querySelector(".combo-item");
+      if (first) pick(Number(first.dataset.id));
+    } else if (e.key === "Escape") list.classList.add("hidden");
+  });
+  list.addEventListener("mousedown", (e) => {
+    const item = e.target.closest(".combo-item");
+    if (item) pick(Number(item.dataset.id));
+  });
+  input.addEventListener("blur", () => setTimeout(() => list.classList.add("hidden"), 150));
+
+  return { el: wrap, getId: () => chosenId, reset: () => { chosenId = null; input.value = ""; } };
+}
+
 function renderRelAdders(p) {
   ["parent", "spouse", "child"].forEach((relType) => {
     const holder = document.querySelector(`[data-adder="${relType}"]`);
     if (!holder) return;
-    const options = state.people
-      .filter((o) => o.id !== p.id)
-      .map((o) => `<option value="${o.id}">${esc(fullName(o))}</option>`)
-      .join("");
-    const marr = relType === "spouse"
-      ? `<input type="text" class="rel-marr" placeholder="Evlilik tarihi" style="width:130px" />`
-      : "";
-    holder.innerHTML = `<div class="inline-form">
-      <select class="rel-select"><option value="">+ ${esc(relLabel(relType))} ekle…</option>${options}</select>
-      ${marr}
-      <button class="small rel-add-btn">Ekle</button>
-    </div>`;
-    holder.querySelector(".rel-add-btn").addEventListener("click", () => {
-      const sel = holder.querySelector(".rel-select");
-      const id = Number(sel.value);
-      if (!id) return;
-      const marriage = holder.querySelector(".rel-marr")?.value || "";
-      addRelationship(p.id, relType, id, marriage);
+    holder.innerHTML = "";
+    const form = document.createElement("div");
+    form.className = "inline-form";
+
+    const picker = createPersonPicker({
+      exclude: [p.id],
+      placeholder: `${relLabel(relType)} ara…`,
     });
+    form.appendChild(picker.el);
+
+    let marrInput = null;
+    if (relType === "spouse") {
+      marrInput = document.createElement("input");
+      marrInput.type = "text";
+      marrInput.placeholder = "Evlilik tarihi";
+      marrInput.style.width = "130px";
+      form.appendChild(marrInput);
+    }
+
+    const btn = document.createElement("button");
+    btn.className = "small";
+    btn.textContent = "Ekle";
+    btn.addEventListener("click", () => {
+      const id = picker.getId();
+      if (!id) return toast("Önce listeden kişi seçin", true);
+      addRelationship(p.id, relType, id, marrInput ? marrInput.value : "");
+    });
+    form.appendChild(btn);
+    holder.appendChild(form);
   });
 }
 
