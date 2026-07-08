@@ -196,6 +196,8 @@ label input, label select { color: var(--ink); }
 .sp-edit { display: flex; gap: 0.4rem; flex-wrap: wrap; flex-basis: 100%; margin-top: 0.2rem; }
 .sp-edit input { font-size: 0.85rem; }
 
+.est-note { font-size: 0.78rem; color: #b5651d; background: #b5651d12; padding: 0.3rem 0.5rem; border-radius: 6px; }
+
 /* Toplu işlemler */
 .bulk-page h1 { font-size: 1.3rem; margin-bottom: 0.8rem; }
 .bulk-filters, .bulk-actionbar { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.8rem; }

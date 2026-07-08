@@ -68,6 +68,9 @@ class BulkUpdate(BaseModel):
     ids: list[int]
     set: BulkSet = BulkSet()
     add_family: str | None = None
+    # Verilirse: vefat kaydı olmayan her kişiye doğum yılı + bu yaş kadar,
+    # GEDCOM "EST" (tahmini) işaretiyle ölüm yılı atanır (sonradan düzeltilebilir).
+    estimate_death_age: int | None = None
 
 
 _FIELD_TR = {
@@ -85,7 +88,8 @@ def bulk_update(
     if not payload.ids:
         raise HTTPException(status_code=400, detail="Kişi seçilmedi")
     changes = payload.set.model_dump(exclude_none=True)
-    if not changes and not (payload.add_family or "").strip():
+    est_age = payload.estimate_death_age
+    if not changes and not (payload.add_family or "").strip() and not est_age:
         raise HTTPException(status_code=400, detail="Uygulanacak bir değişiklik yok")
 
     fam = None
@@ -98,7 +102,14 @@ def bulk_update(
             db.flush()
 
     updated = 0
+    est_applied = 0
     for ind in db.scalars(select(Individual).where(Individual.id.in_(payload.ids))).all():
+        # Tahmini vefat: yalnız doğum yılı olan ve henüz vefat kaydı olmayanlara.
+        if est_age:
+            by = _year(ind.birth_date)
+            if by and not (ind.death_date or "").strip():
+                ind.death_date = f"EST {by + est_age}"
+                est_applied += 1
         for key, val in changes.items():
             setattr(ind, key, val)
         if fam is not None:
@@ -109,6 +120,8 @@ def bulk_update(
         updated += 1
 
     parts = [_FIELD_TR[k] for k in changes if k in _FIELD_TR]
+    if est_age:
+        parts.append(f"tahmini vefat (~{est_age} yaş, {est_applied} kişi)")
     if fam is not None:
         parts.append(f"{fam.name} kolu")
     log_activity(db, user, "bulk_updated", None,

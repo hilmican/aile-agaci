@@ -268,6 +268,8 @@ function renderDetail(p) {
     <div class="detail-grid">
       ${field("Doğum", trDate(p.birth_date), p.birth_place)}
       ${field("Ölüm", trDate(p.death_date), p.death_place)}
+      ${(p.death_date || "").trim().toUpperCase().startsWith("EST")
+        ? `<div class="field"><span class="k"></span><div class="est-note">⚠ Ölüm yılı toplu işlemle (~yaş) tahmin edildi; kesin kayıt bulununca düzeltin.</div></div>` : ""}
       ${field("Kızlık soyadı", p.maiden_name)}
       ${field("Meslek", p.occupation)}
       ${lastResidenceField(p)}
@@ -1614,6 +1616,7 @@ function bulkFiltered() {
     if (f === "no_birth_place" && (p.birth_place || "").trim()) return false;
     if (f === "no_birth_date" && (p.birth_date || "").trim()) return false;
     if (f === "no_birth_coord" && p.has_birth_coord) return false;
+    if (f === "est_death" && !(p.death_date || "").trim().toUpperCase().startsWith("EST")) return false;
     if (ymin && !(p.birth_year && p.birth_year >= ymin)) return false;
     if (ymax && !(p.birth_year && p.birth_year <= ymax)) return false;
     return true;
@@ -1637,7 +1640,8 @@ function bulkGroups(people) {
 
 function bulkRow(p) {
   const bits = [p.birth_year || "?", (p.birth_place || "").split("/")[0]].filter(Boolean).join(" · ");
-  const flags = [!p.alive ? "" : (p.age && p.age > 100 ? `⚠ ${p.age} yaş` : ""),
+  const est = (p.death_date || "").trim().toUpperCase().startsWith("EST");
+  const flags = [!p.alive ? (est ? "tah. vefat" : "") : (p.age && p.age > 100 ? `⚠ ${p.age} yaş` : ""),
     !p.has_birth_coord && (p.birth_place || "").trim() ? "📍yok" : ""].filter(Boolean).join(" ");
   return `<label class="bulk-row">
     <input type="checkbox" class="bulk-chk" value="${p.id}" />
@@ -1673,6 +1677,8 @@ function renderBulkValue() {
   if (action === "birth_place") {
     wrap.innerHTML = `<input type="text" id="bulk-value" placeholder="Doğum yeri (seç)" autocomplete="off" />`;
     attachPlaceAutocomplete($("#bulk-value"), (pk) => { bulkPick = pk; });
+  } else if (action === "estimate_death") {
+    wrap.innerHTML = `<input type="number" id="bulk-value" value="100" title="Varsayılan vefat yaşı" style="width:90px" /> <span class="muted">yaşında (tahmini/EST)</span>`;
   } else if (action === "add_family") {
     wrap.innerHTML = `<input type="text" id="bulk-value" placeholder="Aile kolu adı" />`;
   } else if (action) {
@@ -1693,6 +1699,7 @@ async function applyBulk() {
 
   const body = { ids };
   if (action === "add_family") body.add_family = val;
+  else if (action === "estimate_death") body.estimate_death_age = Number(val) || 100;
   else if (action === "birth_place") {
     body.set = { birth_place: val };
     if (bulkPick) { body.set.birth_lat = bulkPick.lat; body.set.birth_lng = bulkPick.lon; }
