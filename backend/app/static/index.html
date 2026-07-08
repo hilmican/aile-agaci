@@ -32,6 +32,7 @@
         <button class="tab" data-tab="tree">Ağaç</button>
         <button class="tab" data-tab="families">Aileler</button>
         <button class="tab" data-tab="map">Harita</button>
+        <button class="tab editor-only hidden" data-tab="bulk">Toplu</button>
         <button class="tab" data-tab="import">İçe Aktar</button>
         <button class="tab admin-only hidden" data-tab="users">Kullanıcılar</button>
       </nav>
@@ -60,6 +61,52 @@
             <div id="dash-health"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Bulk actions (toplu işlemler) -->
+    <section id="tab-bulk" class="tab-panel hidden">
+      <div class="bulk-page">
+        <h1>Toplu İşlemler</h1>
+        <div class="bulk-filters">
+          <label>Durum:
+            <select id="bulk-filter">
+              <option value="all">Tümü</option>
+              <option value="over100_alive">100+ yaş, vefat kaydı yok</option>
+              <option value="no_birth_place">Doğum yeri eksik</option>
+              <option value="no_birth_date">Doğum tarihi eksik</option>
+              <option value="no_birth_coord">Harita konumu (koordinat) yok</option>
+            </select>
+          </label>
+          <label>Doğum yılı ≥ <input type="number" id="bulk-ymin" class="bulk-year" /></label>
+          <label>≤ <input type="number" id="bulk-ymax" class="bulk-year" /></label>
+          <label>Grupla:
+            <select id="bulk-group">
+              <option value="none">Yok</option>
+              <option value="family">Aile kolu</option>
+              <option value="last_name">Soyad</option>
+              <option value="birth_place">Doğum yeri</option>
+              <option value="decade">Doğum on yılı</option>
+            </select>
+          </label>
+          <span id="bulk-count" class="muted"></span>
+        </div>
+
+        <div class="bulk-actionbar">
+          <label><input type="checkbox" id="bulk-all" /> Tümünü seç</label>
+          <select id="bulk-action">
+            <option value="">— Toplu işlem seç —</option>
+            <option value="birth_place">Doğum yeri ata</option>
+            <option value="death_date">Ölüm tarihi ata</option>
+            <option value="death_place">Ölüm yeri ata</option>
+            <option value="occupation">Meslek ata</option>
+            <option value="add_family">Aile koluna ekle</option>
+          </select>
+          <span id="bulk-value-wrap"></span>
+          <button id="bulk-apply">Uygula</button>
+        </div>
+
+        <div id="bulk-list"></div>
       </div>
     </section>
 

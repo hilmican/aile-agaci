@@ -154,6 +154,7 @@ $$(".tab").forEach((btn) => {
     if (tab === "home") loadDashboard();
     if (tab === "families") openFamilies();
     if (tab === "map") openMap();
+    if (tab === "bulk") openBulk();
   });
 });
 
@@ -200,6 +201,7 @@ async function applyHash() {
     return true;
   }
   if (tab === "map") { await openMap(); return true; }
+  if (tab === "bulk") { await openBulk(); return true; }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
@@ -1537,6 +1539,7 @@ async function loadDashboard() {
     family_added: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini <b>${esc(f.detail)}</b> koluna ekledi`,
     family_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini <b>${esc(f.detail)}</b> kolundan çıkardı`,
     gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
+    bulk_updated: (f) => `${esc(f.user)} toplu güncelleme yaptı${f.detail ? `: ${esc(f.detail)}` : ""}`,
   };
   function nameOrLink(f) {
     return f.individual_id
@@ -1579,6 +1582,129 @@ $("#tab-home").addEventListener("click", (e) => {
   switchTab("people");
   selectPerson(Number(el.dataset.person));
 });
+
+/* ---- Toplu işlemler ---- */
+let bulkData = null, bulkPick = null;
+
+async function openBulk() {
+  switchTab("bulk");
+  updateHash({ tab: "bulk" });
+  if (!bulkData) {
+    try { bulkData = await api("/api/bulk/list"); }
+    catch (_) { toast("Liste yüklenemedi", true); return; }
+    ["#bulk-filter", "#bulk-group"].forEach((s) =>
+      $(s).addEventListener("change", renderBulk));
+    ["#bulk-ymin", "#bulk-ymax"].forEach((s) =>
+      $(s).addEventListener("input", renderBulk));
+    $("#bulk-all").addEventListener("change", (e) =>
+      $$("#bulk-list .bulk-chk").forEach((c) => { c.checked = e.target.checked; }));
+    $("#bulk-action").addEventListener("change", renderBulkValue);
+    $("#bulk-apply").addEventListener("click", applyBulk);
+  }
+  renderBulk();
+}
+
+function bulkFiltered() {
+  const f = $("#bulk-filter").value;
+  const ymin = Number($("#bulk-ymin").value) || null;
+  const ymax = Number($("#bulk-ymax").value) || null;
+  const t = bulkData.this_year;
+  return bulkData.people.filter((p) => {
+    if (f === "over100_alive" && !(p.alive && p.birth_year && t - p.birth_year > 100)) return false;
+    if (f === "no_birth_place" && (p.birth_place || "").trim()) return false;
+    if (f === "no_birth_date" && (p.birth_date || "").trim()) return false;
+    if (f === "no_birth_coord" && p.has_birth_coord) return false;
+    if (ymin && !(p.birth_year && p.birth_year >= ymin)) return false;
+    if (ymax && !(p.birth_year && p.birth_year <= ymax)) return false;
+    return true;
+  });
+}
+
+function bulkGroups(people) {
+  const g = $("#bulk-group").value;
+  if (g === "none") return [["", people]];
+  const map = new Map();
+  people.forEach((p) => {
+    let keys = [""];
+    if (g === "family") keys = p.families.length ? p.families : ["(kolsuz)"];
+    else if (g === "last_name") keys = [p.last_name || "(soyadsız)"];
+    else if (g === "birth_place") keys = [(p.birth_place || "").split("/")[0].trim() || "(yer yok)"];
+    else if (g === "decade") keys = [p.birth_year ? `${Math.floor(p.birth_year / 10) * 10}'lar` : "(yıl yok)"];
+    keys.forEach((k) => { if (!map.has(k)) map.set(k, []); map.get(k).push(p); });
+  });
+  return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
+}
+
+function bulkRow(p) {
+  const bits = [p.birth_year || "?", (p.birth_place || "").split("/")[0]].filter(Boolean).join(" · ");
+  const flags = [!p.alive ? "" : (p.age && p.age > 100 ? `⚠ ${p.age} yaş` : ""),
+    !p.has_birth_coord && (p.birth_place || "").trim() ? "📍yok" : ""].filter(Boolean).join(" ");
+  return `<label class="bulk-row">
+    <input type="checkbox" class="bulk-chk" value="${p.id}" />
+    <span class="sex-dot ${esc(p.sex)}"></span>
+    <span class="bulk-name">${esc(p.name)}</span>
+    <span class="bulk-sub">${esc(bits)}</span>
+    <span class="bulk-flags">${esc(flags)}</span>
+  </label>`;
+}
+
+function renderBulk() {
+  const people = bulkFiltered();
+  $("#bulk-count").textContent = `${people.length} kişi`;
+  $("#bulk-all").checked = false;
+  const groups = bulkGroups(people);
+  $("#bulk-list").innerHTML = groups.map(([title, ppl]) => `
+    <div class="bulk-group">
+      ${title ? `<div class="bulk-group-head">
+        <label><input type="checkbox" class="bulk-group-all" /> <b>${esc(title)}</b> (${ppl.length})</label>
+      </div>` : ""}
+      ${ppl.map(bulkRow).join("")}
+    </div>`).join("") || '<p class="muted">Bu filtreye uyan kişi yok.</p>';
+  $$("#bulk-list .bulk-group-all").forEach((c) =>
+    c.addEventListener("change", (e) =>
+      e.target.closest(".bulk-group").querySelectorAll(".bulk-chk")
+        .forEach((chk) => { chk.checked = e.target.checked; })));
+}
+
+function renderBulkValue() {
+  const action = $("#bulk-action").value;
+  const wrap = $("#bulk-value-wrap");
+  bulkPick = null;
+  if (action === "birth_place") {
+    wrap.innerHTML = `<input type="text" id="bulk-value" placeholder="Doğum yeri (seç)" autocomplete="off" />`;
+    attachPlaceAutocomplete($("#bulk-value"), (pk) => { bulkPick = pk; });
+  } else if (action === "add_family") {
+    wrap.innerHTML = `<input type="text" id="bulk-value" placeholder="Aile kolu adı" />`;
+  } else if (action) {
+    const ph = { death_date: "Ölüm tarihi", death_place: "Ölüm yeri", occupation: "Meslek" }[action];
+    wrap.innerHTML = `<input type="text" id="bulk-value" placeholder="${ph}" />`;
+  } else {
+    wrap.innerHTML = "";
+  }
+}
+
+async function applyBulk() {
+  const action = $("#bulk-action").value;
+  if (!action) return toast("Bir toplu işlem seçin", true);
+  const ids = $$("#bulk-list .bulk-chk:checked").map((c) => Number(c.value));
+  if (!ids.length) return toast("Kişi seçin", true);
+  const val = ($("#bulk-value")?.value || "").trim();
+  if (!val) return toast("Bir değer girin", true);
+
+  const body = { ids };
+  if (action === "add_family") body.add_family = val;
+  else if (action === "birth_place") {
+    body.set = { birth_place: val };
+    if (bulkPick) { body.set.birth_lat = bulkPick.lat; body.set.birth_lng = bulkPick.lon; }
+  } else {
+    body.set = { [action]: val };
+  }
+  if (!confirm(`${ids.length} kişiye uygulansın mı?`)) return;
+  const r = await api("/api/bulk/update", { method: "POST", json: body });
+  toast(`${r.updated} kişi güncellendi`);
+  bulkData = await api("/api/bulk/list"); // tazele
+  renderBulk();
+}
 
 /* ---- Zaman bazlı coğrafi harita ---- */
 let mapObj = null, mapLayer = null, mapData = null, mapPlayTimer = null;
