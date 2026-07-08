@@ -118,6 +118,10 @@ CITIES: dict[str, tuple[float, float]] = {
     "amsterdam": (52.37, 4.90), "brussels": (50.85, 4.35), "brüksel": (50.85, 4.35),
     "moskova": (55.76, 37.62), "moscow": (55.76, 37.62),
     "passaic": (40.86, -74.13), "passaic city": (40.86, -74.13),
+  # Sık geçen Trabzon ilçeleri + İstanbul ilçesi (isabetli konum)
+  "surmene": (40.91, 40.11), "arakli": (40.94, 40.06), "of": (40.94, 40.26),
+  "yomra": (40.95, 39.86), "vakfikebir": (41.05, 39.28), "macka": (40.81, 39.61),
+  "kucukcekmece": (41.00, 28.78), "yesilyurt": (40.90, 40.05),
 }
 
 # Ad -> (lat, lng, seviye) birleşik indeks; seviye küçükse daha spesifik.
