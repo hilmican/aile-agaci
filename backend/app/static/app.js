@@ -1736,12 +1736,21 @@ async function openMap() {
     slider.value = mapData.max_year;
     slider.addEventListener("input", () => drawMapYear(Number(slider.value)));
     $("#map-play").addEventListener("click", toggleMapPlay);
+    // Aile seçici
+    const famSel = $("#map-family");
+    famSel.innerHTML = '<option value="">Tüm aileler</option>' +
+      (mapData.families || []).map((f) => `<option value="${f.id}">${esc(f.name)}</option>`).join("");
+    famSel.addEventListener("change", () => drawMapYear(Number($("#map-year").value)));
     const un = mapData.unresolved || [];
     $("#map-unresolved").textContent = un.length
       ? `Haritaya konulamayan ${un.length} yer (il tanınmadı): ${un.slice(0, 12).join(", ")}${un.length > 12 ? "…" : ""}`
       : "";
   }
   drawMapYear(Number($("#map-year").value));
+}
+
+function mapFamilyById(id) {
+  return (mapData.families || []).find((f) => f.id === id) || null;
 }
 
 // Belirli bir yılda kişiyi konumlandır: o yılı kapsayan "stay".
@@ -1759,27 +1768,57 @@ function jitter(id) {
   return [(a - 0.5) * 0.5, (b - 0.5) * 0.5];
 }
 
+function personPopup(p) {
+  const edit = canEdit()
+    ? ` · <a href="#tab=people&person=${p.id}&edit=1" target="_blank" rel="noopener">✏️ Düzenle</a>` : "";
+  return `<b>${esc(p.name)}</b><br>
+    <a href="#tab=people&person=${p.id}" target="_blank" rel="noopener">Profili aç</a>${edit}`;
+}
+
 function drawMapYear(year) {
   if (!mapData || !mapLayer) return;
   mapLayer.clearLayers();
-  let n = 0;
+  const famId = Number($("#map-family").value) || null;
+  const fam = famId ? mapFamilyById(famId) : null;
+
+  // O yıl görünür kişiler (+ konumları)
+  const visible = [];
   mapData.people.forEach((p) => {
+    if (famId && !(p.families || []).includes(famId)) return;
     if (p.birth_year && year < p.birth_year) return;
     if (p.death_year && year > p.death_year) return;
     const s = stayAt(p, year);
-    if (!s) return;
-    const [dy, dx] = jitter(p.id);
-    const color = p.sex === "M" ? "#5b9bd1" : p.sex === "F" ? "#dd8ba1" : "#8a8577";
-    const edit = canEdit()
-      ? `<br><a href="#tab=people&person=${p.id}&edit=1" target="_blank" rel="noopener">✏️ Düzenle</a>` : "";
-    L.circleMarker([s.lat + dy, s.lng + dx], {
-      radius: 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.85,
-    }).bindPopup(`<b>${esc(p.name)}</b>
-      <br><a href="#tab=people&person=${p.id}" target="_blank" rel="noopener">Profili aç</a>${edit}`).addTo(mapLayer);
-    n++;
+    if (s) visible.push({ p, lat: s.lat, lng: s.lng });
   });
+
+  if (fam && fam.emblem) {
+    // Belli aile: aynı bölgedeki kişileri topla, o noktaya aile armasını koy.
+    const clusters = new Map();
+    visible.forEach((v) => {
+      const key = `${v.lat.toFixed(1)},${v.lng.toFixed(1)}`;
+      if (!clusters.has(key)) clusters.set(key, { lat: v.lat, lng: v.lng, people: [] });
+      clusters.get(key).people.push(v.p);
+    });
+    clusters.forEach((c) => {
+      const html = `<div class="em-mark">${emblemSvg(fam.emblem)}${
+        c.people.length > 1 ? `<span class="em-badge">${c.people.length}</span>` : ""}</div>`;
+      const icon = L.divIcon({ className: "emblem-marker", html, iconSize: [38, 38], iconAnchor: [19, 19] });
+      const popup = `<b>${esc(fam.name)}</b> — ${c.people.length} kişi<br>` +
+        c.people.map(personPopup).join("<hr style='margin:4px 0'>");
+      L.marker([c.lat, c.lng], { icon }).bindPopup(popup).addTo(mapLayer);
+    });
+  } else {
+    // Tüm aileler ya da armasız aile: kişi başına nokta.
+    visible.forEach((v) => {
+      const [dy, dx] = jitter(v.p.id);
+      const color = v.p.sex === "M" ? "#5b9bd1" : v.p.sex === "F" ? "#dd8ba1" : "#8a8577";
+      L.circleMarker([v.lat + dy, v.lng + dx], {
+        radius: 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.85,
+      }).bindPopup(personPopup(v.p)).addTo(mapLayer);
+    });
+  }
   $("#map-year-label").textContent = year;
-  $("#map-count").textContent = `${n} kişi`;
+  $("#map-count").textContent = `${visible.length} kişi`;
 }
 
 function toggleMapPlay() {

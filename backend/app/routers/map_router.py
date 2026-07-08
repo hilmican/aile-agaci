@@ -9,8 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Individual, Residence, User
+from ..models import Family, Individual, Residence, User
 from ..security import get_current_user
+from .families import compute_memberships
 
 router = APIRouter(prefix="/api/map", tags=["map"])
 
@@ -176,6 +177,17 @@ def timeline(db: Session = Depends(get_db), _: User = Depends(get_current_user))
     for r in db.scalars(select(Residence)).all():
         residences.setdefault(r.individual_id, []).append(r)
 
+    # Kişi -> ait olduğu aile kolları (miras/evlilik dahil)
+    memberships = compute_memberships(db)
+    fam_of: dict[int, list[int]] = {}
+    for fid, membs in memberships.items():
+        for pid in membs:
+            fam_of.setdefault(pid, []).append(fid)
+    families_meta = [
+        {"id": f.id, "name": f.name, "emblem": f.emblem}
+        for f in db.scalars(select(Family)).all()
+    ]
+
     for ind in db.scalars(select(Individual)).all():
         birth_y = _year(ind.birth_date)
         death_y = _year(ind.death_date)
@@ -223,6 +235,7 @@ def timeline(db: Session = Depends(get_db), _: User = Depends(get_current_user))
             "birth_year": birth_y,
             "death_year": death_y,
             "stays": stays,
+            "families": fam_of.get(ind.id, []),
         })
 
     if not people_out:
@@ -231,5 +244,6 @@ def timeline(db: Session = Depends(get_db), _: User = Depends(get_current_user))
         "min_year": min_year,
         "max_year": max_year,
         "people": people_out,
+        "families": families_meta,
         "unresolved": sorted(unresolved),
     }
