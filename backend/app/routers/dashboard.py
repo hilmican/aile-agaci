@@ -198,17 +198,28 @@ def dashboard_list(kind: str, db: Session = Depends(get_db), _: User = Depends(g
         for sp in db.scalars(select(Spouse)).all():
             a = db.get(Individual, sp.a_id)
             b = db.get(Individual, sp.b_id)
-            _, _, year = _parse_day_month_year(sp.marriage_date)
+            _, _, m_year = _parse_day_month_year(sp.marriage_date)
+            # Sıralama: evlilik yılı; yoksa çiftin doğum yıllarından tahmin
+            # (~20 yaş sonrası) → ağaçtaki tarihsel sırayla uyumlu yerleşir.
+            if m_year:
+                sort_year, exact = m_year, True
+            else:
+                bys = [_parse_day_month_year(x.birth_date)[2] for x in (a, b) if x]
+                bys = [y for y in bys if y]
+                sort_year = (max(bys) + 20) if bys else 9999
+                exact = False
             items.append({
                 "a": _person_ref(a) if a else None,
                 "b": _person_ref(b) if b else None,
                 "date": sp.marriage_date,
                 "place": sp.marriage_place,
-                "_year": year or 9999,
+                "_sort": (sort_year, 0 if exact else 1),
+                "name": (a.last_name if a else "") + (a.first_name if a else ""),
             })
-        items.sort(key=lambda x: x["_year"])
+        items.sort(key=lambda x: (x["_sort"][0], x["_sort"][1], x["name"]))
         for x in items:
-            x.pop("_year", None)
+            x.pop("_sort", None)
+            x.pop("name", None)
         return {"kind": kind, "title": "Evlilikler", "items": items}
 
     if kind == "anecdotes":
