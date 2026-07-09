@@ -347,6 +347,22 @@ def pedigree(
 ):
     depth = max(1, min(depth, 30))
 
+    # Her kişinin gösterilecek aile arması: ait olduğu (en küçük id'li) armalı kol.
+    memberships = compute_memberships(db)
+    fam_emblem = {f.id: f.emblem for f in db.scalars(select(Family)).all()}
+    person_fams: dict[int, list[int]] = {}
+    for fid, membs in memberships.items():
+        for pid in membs:
+            person_fams.setdefault(pid, []).append(fid)
+    emblem_of: dict[int, str] = {}
+    for pid, fids in person_fams.items():
+        for fid in sorted(fids):
+            if fam_emblem.get(fid):
+                emblem_of[pid] = fam_emblem[fid]
+                break
+
+    anecdote_ids = set(db.scalars(select(Anecdote.individual_id).distinct()).all())
+
     def person_payload(ind: Individual) -> dict:
         return {
             "id": ind.id,
@@ -356,6 +372,8 @@ def pedigree(
             "birth_place": ind.birth_place,
             "death_date": ind.death_date,
             "photo": f"/uploads/{ind.media[0].filename}" if ind.media else None,
+            "emblem": emblem_of.get(ind.id, ""),
+            "has_anecdotes": ind.id in anecdote_ids,
         }
 
     def siblings_of(pid: int, seen: set[int]) -> list[dict]:

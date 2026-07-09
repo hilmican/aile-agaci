@@ -291,11 +291,19 @@ label input, label select { color: var(--ink); }
 .link { fill: none; stroke: #b0aa9d; stroke-width: 2px; }
 .couple-link { stroke: #b0aa9d; stroke-width: 2px; }
 .sib-link { stroke: #c4bfb2; stroke-width: 1.5px; stroke-dasharray: 5 4; }
-.jump-btn, .edit-btn { cursor: pointer; }
-.jump-btn circle, .edit-btn circle { fill: #fff; stroke: #8a8577; stroke-width: 1px; }
+.jump-btn, .edit-btn, .anec-btn { cursor: pointer; }
+.jump-btn circle, .edit-btn circle, .anec-btn circle { fill: #fff; stroke: #8a8577; stroke-width: 1px; }
 .jump-btn:hover circle { fill: #eaf3ec; stroke: #4a7c59; stroke-width: 1.5px; }
 .edit-btn:hover circle { fill: #eef0fb; stroke: #6a5acd; stroke-width: 1.5px; }
-.jump-btn text, .edit-btn text { font-size: 10px; }
+.anec-btn circle { fill: #fff7e6; stroke: #d0a24c; }
+.anec-btn:hover circle { stroke: #b5651d; stroke-width: 1.5px; }
+.jump-btn text, .edit-btn text, .anec-btn text { font-size: 10px; }
+/* Hızlı düzenleme ikonu silik; yalnız kart hover'ında belirir */
+.edit-btn { opacity: 0; transition: opacity 0.12s; }
+.node-card:hover .edit-btn { opacity: 1; }
+/* Ağaç yıl bantları */
+.year-band-bg { fill: #6a5acd; opacity: 0.045; }
+.band-label { fill: #6a5acd; opacity: 0.5; font-size: 13px; font-weight: 700; }
 /* Hızlı düzenleme popup'ı */
 .qe-modal { background: var(--panel); border-radius: 12px; width: min(560px, 100%); max-height: 86vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
 .qe-body { padding: 1rem 1.1rem; }

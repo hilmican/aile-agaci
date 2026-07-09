@@ -1094,6 +1094,83 @@ function elbowPath(d) {
   return `M${d.source.x},${sy} V${my} H${d.target.x} V${ty}`;
 }
 
+function treeCardYear(c) {
+  const m = /\d{3,4}/.exec(c.data.birth_date || "");
+  return m ? Number(m[0]) : null;
+}
+
+// Nesilleri yukarıdan aşağı yıl bantlarında göster (zaman ilerleme hissi).
+function drawYearBands(layer, cards) {
+  if (!cards.length) return;
+  const xs = cards.map((c) => c.x);
+  const minX = Math.min(...xs) - NODE_W;
+  const w = (Math.max(...xs) + NODE_W) - minX;
+  const byY = new Map();
+  cards.forEach((c) => {
+    const k = Math.round(c.y);
+    if (!byY.has(k)) byY.set(k, []);
+    byY.get(k).push(c);
+  });
+  [...byY.keys()].sort((a, b) => a - b).forEach((y, i) => {
+    if (i % 2 === 0) {
+      layer.append("rect").attr("class", "year-band-bg")
+        .attr("x", minX).attr("y", y - GAP_Y / 2).attr("width", w).attr("height", GAP_Y);
+    }
+    const years = byY.get(y).map(treeCardYear).filter(Boolean);
+    if (years.length) {
+      const mn = Math.min(...years), mx = Math.max(...years);
+      layer.append("text").attr("class", "band-label")
+        .attr("x", minX + 10).attr("y", y).attr("dy", "0.32em")
+        .text(mn === mx ? `${mn}` : `${mn}–${mx}`);
+    }
+  });
+}
+
+// Karta küçük aile arması (SVG havuz ya da custom görsel) ekle.
+function appendCardEmblem(sel, key, x, y, size) {
+  if (!key) return;
+  if (key.startsWith("custom:")) {
+    sel.append("image").attr("href", "/uploads/" + key.slice(7))
+      .attr("x", x).attr("y", y).attr("width", size).attr("height", size)
+      .attr("preserveAspectRatio", "xMidYMid meet").attr("pointer-events", "none");
+  } else if (EMBLEMS[key]) {
+    const s = sel.append("svg").attr("x", x).attr("y", y)
+      .attr("width", size).attr("height", size).attr("viewBox", "0 0 100 100")
+      .attr("pointer-events", "none");
+    s.style("color", "#6a5acd").html(`<g fill="currentColor">${EMBLEMS[key].svg}</g>`);
+  }
+}
+
+// Kişinin anekdotlarını popup'ta listele.
+async function openAnecdotes(id) {
+  let p;
+  try { p = await api("/api/individuals/" + id); } catch (_) { return; }
+  let ov = $("#anec-view");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "anec-view";
+    ov.className = "modal-backdrop hidden";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); });
+  }
+  const list = (p.anecdotes || []).map((a) => {
+    const when = a.created_at
+      ? new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" })
+          .format(new Date(a.created_at)) : "";
+    return `<div class="anecdote">
+      ${a.title ? `<div class="anec-title">${esc(a.title)}</div>` : ""}
+      <div class="anec-text">${esc(a.text)}</div>
+      <div class="anec-meta">${esc(a.author_name || "")}${when ? ` · ${esc(when)}` : ""}</div>
+    </div>`;
+  }).join("") || '<p class="muted">Anekdot yok.</p>';
+  ov.innerHTML = `<div class="emblem-modal">
+    <div class="modal-head"><h2>📖 ${esc(fullName(p))}</h2><button class="ghost" data-ac-close>✕</button></div>
+    <div class="modal-body anecdotes">${list}</div>
+  </div>`;
+  ov.querySelector("[data-ac-close]").addEventListener("click", () => ov.classList.add("hidden"));
+  ov.classList.remove("hidden");
+}
+
 // Shared renderer: takes laid-out links/nodes, draws cards + zoom + fit.
 // centerFocus: ekrana sığdırmak yerine görüntüyü odak kişiye ortala.
 function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
@@ -1115,6 +1192,8 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   // yeniden çizilebilsin diye transform'suz kalır.
   const gZoom = svg.append("g");
   const g = gZoom.append("g").attr("id", "tree-content");
+  // Yıl bantları en arkada; kart/çizgilerden önce eklenir.
+  const bandsLayer = g.append("g").attr("class", "year-bands").attr("pointer-events", "none");
 
   // Ana kartlar + eş kartları (sağa) + kardeş kartları (sola, dal açılmadan).
   const cards = [];
@@ -1134,6 +1213,8 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
       cards.push({ x: sx, y: d.y, data: sb, focus: false });
     });
   });
+
+  drawYearBands(bandsLayer, cards);
 
   g.selectAll("path.link")
     .data(links)
@@ -1197,6 +1278,13 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
     .attr("class", "dates").attr("x", TEXT_X).attr("y", 18)
     .text((c) => truncate(datesLabel(c.data), 24));
 
+  // Aile arması (sol üst köşe) — varsa, avatarın üstünde küçük ve dekoratif.
+  card.filter((c) => c.data.emblem)
+    .each(function (c) {
+      appendCardEmblem(d3.select(this), c.data.emblem,
+        -NODE_W / 2 + 3, -NODE_H / 2 + 3, 16);
+    });
+
   // Tam isim + tarihler + doğum yeri tarayıcı tooltip'i olarak.
   card.append("title")
     .text((c) => {
@@ -1218,19 +1306,33 @@ function drawTreeSvg(links, nodes, focusId = null, centerFocus = false) {
   jump.append("text").attr("text-anchor", "middle").attr("dy", "3.5").text("🌳");
   jump.append("title").text("Ağacını göster (odağı buna al)");
 
-  // Hızlı düzenleme ikonu (sol üst köşe) — yalnız düzenleyiciye.
+  // Hızlı düzenleme: kartın sağ ALT köşesinde, silik; yalnız üzerine gelince
+  // belirir (dikkat dağıtmaz). Yalnız düzenleyiciye.
   if (canEdit()) {
     const editG = card.append("g")
       .attr("class", "edit-btn")
-      .attr("transform", `translate(${-NODE_W / 2 + 13},${-NODE_H / 2 + 13})`)
+      .attr("transform", `translate(${NODE_W / 2 - 12},${NODE_H / 2 - 11})`)
       .on("click", (e, c) => {
         e.stopPropagation();
         openQuickEdit(c.data.id);
       });
-    editG.append("circle").attr("r", 9);
-    editG.append("text").attr("text-anchor", "middle").attr("dy", "3.5").text("✏️");
+    editG.append("circle").attr("r", 8);
+    editG.append("text").attr("text-anchor", "middle").attr("dy", "3").attr("font-size", "9px").text("✏️");
     editG.append("title").text("Hızlı düzenle");
   }
+
+  // Anekdot ikonu (sol alt köşe) — yalnız hakkında anekdot olan kişilerde.
+  const anec = card.filter((c) => c.data.has_anecdotes)
+    .append("g")
+    .attr("class", "anec-btn")
+    .attr("transform", `translate(${-NODE_W / 2 + 12},${NODE_H / 2 - 11})`)
+    .on("click", (e, c) => {
+      e.stopPropagation();
+      openAnecdotes(c.data.id);
+    });
+  anec.append("circle").attr("r", 8);
+  anec.append("text").attr("text-anchor", "middle").attr("dy", "3").attr("font-size", "9px").text("📖");
+  anec.append("title").text("Anekdotları göster");
 
   treeZoom = d3.zoom()
     .scaleExtent([0.05, 4])
