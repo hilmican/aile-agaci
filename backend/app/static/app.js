@@ -1966,18 +1966,34 @@ async function openFamilies(focusId) {
       <span class="fam-emblem">${emblemSvg(f.emblem)}</span>
       <span class="fam-name">${esc(f.name)}</span>
       <span class="fam-count">${f.count} kişi</span>
-      ${canEdit() ? `<button class="small ghost fam-emblem-btn" data-emblem-for="${f.id}">Arma seç</button>` : ""}
+      ${canEdit() ? `<div class="fam-card-actions">
+        <button class="small ghost" data-emblem-for="${f.id}">Arma seç</button>
+        <button class="small ghost" data-rename-for="${f.id}" data-name="${esc(f.name)}">Adı düzenle</button>
+      </div>` : ""}
     </div>`).join("")}</div>
     <div id="fam-members"></div>`;
   box.querySelectorAll("[data-fam]").forEach((b) =>
     b.addEventListener("click", (e) => {
-      if (e.target.closest("[data-emblem-for]")) return;
+      if (e.target.closest("[data-emblem-for],[data-rename-for]")) return;
       showFamilyMembers(Number(b.dataset.fam));
     }));
   box.querySelectorAll("[data-emblem-for]").forEach((b) =>
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       openEmblemPicker(Number(b.dataset.emblemFor));
+    }));
+  box.querySelectorAll("[data-rename-for]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const name = prompt("Aile kolunun yeni adı:", b.dataset.name);
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed || trimmed === b.dataset.name) return;
+      try {
+        await api(`/api/families/${b.dataset.renameFor}`, { method: "PATCH", json: { name: trimmed } });
+        toast("Ad güncellendi");
+        openFamilies(Number(b.dataset.renameFor));
+      } catch (err) { toast(err.message, true); }
     }));
   if (focusId) showFamilyMembers(focusId);
 }

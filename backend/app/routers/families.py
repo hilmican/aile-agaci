@@ -17,8 +17,9 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "im
 router = APIRouter(prefix="/api/families", tags=["families"])
 
 
-class FamilyEmblem(BaseModel):
-    emblem: str = ""
+class FamilyPatch(BaseModel):
+    emblem: str | None = None
+    name: str | None = None
 
 
 def _person_ref(ind: Individual) -> dict:
@@ -57,12 +58,13 @@ def compute_memberships(db: Session) -> dict[int, dict[int, str]]:
                     if c not in blood:
                         blood.add(c)
                         queue.append(c)
-        # Evlilikle katılım: kan bağı olan birinin eşi.
+        # Evlilikle katılım: kan bağı olan biriyle evlenen KADIN eşi (patrilineal
+        # gelenek — erkek, kan bağı olan bir kadınla evlense de aileye katılmaz).
         married = set()
         for a, b in spouse_pairs:
-            if a in blood and b not in blood:
+            if a in blood and b not in blood and sex.get(b) == "F":
                 married.add(b)
-            if b in blood and a not in blood:
+            if b in blood and a not in blood and sex.get(a) == "F":
                 married.add(a)
         membs: dict[int, str] = {}
         for pid in blood:
@@ -85,16 +87,26 @@ def list_families(db: Session = Depends(get_db), _: User = Depends(get_current_u
 
 
 @router.patch("/{family_id}")
-def set_emblem(
+def update_family(
     family_id: int,
-    payload: FamilyEmblem,
+    payload: FamilyPatch,
     db: Session = Depends(get_db),
     _: User = Depends(require_editor),
 ):
     fam = db.get(Family, family_id)
     if fam is None:
         raise HTTPException(status_code=404, detail="Aile bulunamadı")
-    fam.emblem = (payload.emblem or "").strip()[:120]
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Aile adı boş olamaz")
+        clash = db.scalar(select(Family).where(
+            func.lower(Family.name) == new_name.lower(), Family.id != family_id))
+        if clash is not None:
+            raise HTTPException(status_code=400, detail="Bu adda bir aile zaten var")
+        fam.name = new_name[:120]
+    if payload.emblem is not None:
+        fam.emblem = payload.emblem.strip()[:120]
     db.commit()
     return {"id": fam.id, "name": fam.name, "emblem": fam.emblem}
 
