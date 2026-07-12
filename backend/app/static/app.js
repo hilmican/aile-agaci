@@ -1479,16 +1479,38 @@ $("#zoom-loupe").addEventListener("click", () => {
 syncLoupeButton();
 
 // Sadece ağaç sekmesini tam ekran yap (kontroller görünür kalsın diye #tab-tree).
+// Safari webkit önekli; iOS Safari (iPhone) element tam ekranını HİÇ desteklemez
+// → CSS tabanlı "sözde tam ekran" (viewport'u kaplayan sabit katman) fallback'i.
+function nativeFsElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+function exitNativeFs() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+}
 $("#zoom-full").addEventListener("click", () => {
   const el = $("#tab-tree");
-  if (document.fullscreenElement) document.exitFullscreen();
-  else if (el.requestFullscreen) el.requestFullscreen();
+  if (nativeFsElement()) { exitNativeFs(); return; }
+  if (el.classList.contains("pseudo-fullscreen")) {         // sözde tam ekrandan çık
+    el.classList.remove("pseudo-fullscreen");
+    $("#zoom-full").classList.remove("active");
+    setTimeout(() => fitTree(false), 80);
+    return;
+  }
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  else {                                                    // iPhone Safari fallback
+    el.classList.add("pseudo-fullscreen");
+    $("#zoom-full").classList.add("active");
+    setTimeout(() => fitTree(false), 80);
+  }
 });
 // Tam ekrana gir/çıkınca kanvas boyutu değişir → görünümü yeniden sığdır.
-document.addEventListener("fullscreenchange", () => {
-  $("#zoom-full").classList.toggle("active", !!document.fullscreenElement);
-  setTimeout(() => fitTree(false), 80);
-});
+["fullscreenchange", "webkitfullscreenchange"].forEach((ev) =>
+  document.addEventListener(ev, () => {
+    $("#zoom-full").classList.toggle("active", !!nativeFsElement());
+    setTimeout(() => fitTree(false), 80);
+  }));
 
 function selectFromTree(id) {
   $$(".tab").forEach((b) => b.classList.remove("active"));

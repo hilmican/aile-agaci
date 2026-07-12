@@ -132,8 +132,14 @@ label input, label select { color: var(--ink); }
 .zoom-controls button { min-width: 2.2rem; }
 .zoom-controls button.active { background: #4a7c59; color: #fff; border-color: #4a7c59; }
 /* Sadece ağaç sekmesi tam ekranda: kontrol çubuğu üstte, kanvas kalanı doldurur */
+/* Tam ekran: standart, Safari webkit ve iPhone sözde tam ekranı (ayrı kurallar
+   yazıldı; tarayıcı tanımadığı seçiciyi görünce tüm grubu düşürmesin diye). */
 #tab-tree:fullscreen { background: #edebe6; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; }
 #tab-tree:fullscreen .tree-canvas { flex: 1; height: auto; min-height: 0; }
+#tab-tree:-webkit-full-screen { background: #edebe6; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; }
+#tab-tree:-webkit-full-screen .tree-canvas { flex: 1; height: auto; min-height: 0; }
+#tab-tree.pseudo-fullscreen { position: fixed; inset: 0; z-index: 200; margin: 0; background: #edebe6; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; overflow: auto; }
+#tab-tree.pseudo-fullscreen .tree-canvas { flex: 1; height: auto; min-height: 0; }
 .combo { position: relative; }
 #tree-root-input { min-width: 230px; }
 .person-picker { flex: 1; min-width: 240px; }
