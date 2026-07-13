@@ -1795,8 +1795,11 @@ const DNA_SECTION_TR = {
   dna_single_match_get_shared_smart_matches: "Ortak Smart Match'ler",
   dna_single_match_get_kit_pedigree_chart: "Senin soyağacın (kit)",
   dna_single_match_get_other_kit_pedigree_chart: "Eşleşmenin soyağacı",
+  dna_single_match_get_matches_count: "Eşleşme sayıları",
   fetch_dna_match_notes_and_labels: "Notlar ve etiketler",
 };
+// Arayüzde gösterilmeyecek alakasız uçlar
+const DNA_SKIP_SECTIONS = new Set(["get_shopping_cart_query"]);
 
 async function openDnaDetail(id) {
   const m = await api("/api/dna/" + id);
@@ -1819,9 +1822,10 @@ async function openDnaDetail(id) {
   let sections = '<p class="muted">Detay henüz çekilmedi. (Crawler: dna_detail_crawler.py)</p>';
   const eps = m.detail && m.detail.endpoints;
   if (eps) {
-    sections = Object.entries(eps).map(([key, val]) => `<details class="dna-section">
+    sections = Object.entries(eps).filter(([key]) => !DNA_SKIP_SECTIONS.has(key))
+      .map(([key, val]) => `<details class="dna-section">
       <summary>${esc(DNA_SECTION_TR[key] || key)}</summary>
-      <pre>${esc(JSON.stringify(val, null, 1).slice(0, 20000))}</pre>
+      <pre>${esc(JSON.stringify(val, null, 1).slice(0, 40000))}</pre>
     </details>`).join("");
     const dom = m.detail.dom || {};
     if (dom.full_text) {
