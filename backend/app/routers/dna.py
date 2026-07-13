@@ -197,6 +197,70 @@ def _classify_ancestor(term: str) -> tuple[str | None, int | None]:
     return (None, None)
 
 
+_CLUSTER_CACHE: dict = {"key": None, "val": None}
+
+
+def _cluster_sides(db: Session) -> dict:
+    """Tüm eşleşmeler üzerinde graf etiket-yayılımı (label propagation) ile taraf
+    kümelemesi. Düğüm = eşleşme + ortak-eşleşme isimleri; kenar = 'ortak DNA';
+    tohum = ToFR ile taraf'ı bilinenler. 'michel -> Merve -> Hatice' gibi geçişli
+    zincirleri çözer: doğrudan çapa paylaşmasa da kümeye üyeliğinden taraf çıkar.
+    Dönüş: norm_ad -> {side, seed(bool), neighbors:[aynı taraf komşu eşleşme adları]}."""
+    from collections import Counter, defaultdict
+    rows = db.scalars(select(DnaMatch).where(DnaMatch.detail_json != "")).all()
+    key = (len(rows), max((r.detail_at.timestamp() if r.detail_at else 0.0) for r in rows) if rows else 0.0)
+    if _CLUSTER_CACHE["key"] == key:
+        return _CLUSTER_CACHE["val"]
+    adj: dict = defaultdict(set)
+    seed: dict = {}          # norm_ad -> taraf (ToFR, sabit tohum)
+    match_nodes: dict = {}   # norm_ad -> görünen ad (çekilmiş eşleşmeler)
+    dirty = False
+    for r in rows:
+        nn = _norm(r.name)
+        match_nodes[nn] = r.name
+        try:
+            eps = (json.loads(r.detail_json) or {}).get("endpoints", {})
+        except Exception:
+            eps = {}
+        s = r.tofr_side
+        if not s:  # self-heal: eski kayıtta ToFR taraf'ını hesapla ve sakla
+            s = _side_from_eps(eps)
+            if s != (r.tofr_side or ""):
+                r.tofr_side = s
+                dirty = True
+        if s:
+            seed[nn] = s
+        for p in _shared_names(eps):
+            pn = _norm(p)
+            if pn and pn != nn:
+                adj[nn].add(pn)
+                adj[pn].add(nn)
+    if dirty:
+        db.commit()
+    # Etiket yayılımı: tohumlar sabit, diğerleri komşu çoğunluğunu alır.
+    label = dict(seed)
+    for _ in range(8):
+        changed = False
+        for node in list(adj.keys()):
+            if node in seed:
+                continue
+            votes = Counter(label[n] for n in adj[node] if n in label)
+            if votes:
+                best = votes.most_common(1)[0][0]
+                if label.get(node) != best:
+                    label[node] = best
+                    changed = True
+        if not changed:
+            break
+    out = {}
+    for nn, side in label.items():
+        nb = [match_nodes[x] for x in adj.get(nn, ()) if x in match_nodes and label.get(x) == side]
+        out[nn] = {"side": side, "seed": nn in seed, "neighbors": nb[:8]}
+    _CLUSTER_CACHE["key"] = key
+    _CLUSTER_CACHE["val"] = out
+    return out
+
+
 @router.get("/{match_id}/analysis")
 def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Eşleşme için: taraf (baba/anne), olası ortak ata (MRCA, ağaca bağlı),
@@ -273,37 +337,18 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
             if _norm(nm) == _norm(row.name) and self_link is None:
                 self_link = entry
 
-    # ---- In-common taraf çıkarımı ----
-    # Çapa haritası: taraf'ı bilinen (ToFR) eşleşmeler. Eksikleri detaydan doldur.
+    # ---- In-common taraf çıkarımı (graf etiket-yayılımı) ----
+    # Taraf ToFR'den bilinmiyorsa: ortak-eşleşme grafında hangi tarafın kümesine
+    # düştüğüne bak. Geçişli: doğrudan çapa paylaşmasa da (michel -> Merve -> Hatice).
     inferred_side = None
     inferred_votes = {"paternal": 0, "maternal": 0}
     anchors_shared = []
     if side == "unknown":
-        anchor = {}
-        dirty = False
-        for other in db.scalars(select(DnaMatch).where(DnaMatch.detail_json != "")).all():
-            if other.id == row.id:
-                continue
-            os_ = other.tofr_side
-            if not os_:  # eski kayıt: detaydan hesapla ve sakla (self-heal)
-                try:
-                    os_ = _side_from_eps((json.loads(other.detail_json) or {}).get("endpoints", {}))
-                except Exception:
-                    os_ = ""
-                if os_ != (other.tofr_side or ""):
-                    other.tofr_side = os_; dirty = True
-            if os_:
-                anchor[_norm(other.name)] = (os_, other.name)
-        if dirty:
-            db.commit()
-        for nm in _shared_names(eps):
-            hit = anchor.get(_norm(nm))
-            if hit:
-                inferred_votes[hit[0]] += 1
-                anchors_shared.append({"name": hit[1], "side": hit[0]})
-        if inferred_votes["paternal"] or inferred_votes["maternal"]:
-            inferred_side = ("paternal" if inferred_votes["paternal"] >= inferred_votes["maternal"]
-                             else "maternal")
+        node = _cluster_sides(db).get(_norm(row.name))
+        if node and not node["seed"]:
+            inferred_side = node["side"]
+            anchors_shared = [{"name": n, "side": inferred_side} for n in node["neighbors"]]
+            inferred_votes[inferred_side] = len(anchors_shared)
 
     cm = row.shared_cm_val or 0
     conf = ("çok yüksek" if cm >= 1300 else "yüksek" if cm >= 500

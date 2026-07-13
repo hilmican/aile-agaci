@@ -1908,9 +1908,9 @@ async function renderDnaAnalysis(m) {
   }
   const inferNote = inferred
     ? `<div class="an-infer">🧩 Taraf, ortak eşleşme kümelemesiyle çıkarıldı:
-        bilinen ${a.inferred_side_tr.toLowerCase()} akrabalarından
-        <b>${a.anchors_shared.length}</b>'i (${esc(a.anchors_shared.map((x) => x.name).slice(0, 4).join(", "))})
-        ile ortak DNA. <span class="muted">(kesin değil, olasılık)</span></div>`
+        ${a.inferred_side_tr.toLowerCase()} kümesindeki
+        <b>${a.anchors_shared.length}</b> eşleşmeyle${a.anchors_shared.length ? ` (${esc(a.anchors_shared.map((x) => x.name).slice(0, 4).join(", "))})` : ""}
+        ortak DNA. <span class="muted">(kesin değil, olasılık)</span></div>`
     : "";
   box.innerHTML = `
     <div class="an-row"><span class="side-badge ${sideCls}">${esc(sideLabel)}</span>
