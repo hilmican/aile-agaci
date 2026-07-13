@@ -230,6 +230,9 @@ label input, label select { color: var(--ink); }
 .an-place { font-size: 0.85rem; margin-top: 0.4rem; }
 .an-indep { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); }
 .an-self { font-size: 0.85rem; color: #2f5d3f; margin: 0.2rem 0; }
+.dna-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.7rem; font-size: 0.85rem; }
+.dna-links a { color: #4a7c59; text-decoration: none; }
+.dna-links a:hover { text-decoration: underline; }
 .dna-pager { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1rem; }
 .dna-row { cursor: pointer; }
 .dna-row:hover { background: #4a7c5910; }

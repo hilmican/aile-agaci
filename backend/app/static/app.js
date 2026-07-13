@@ -1837,6 +1837,10 @@ async function openDnaDetail(id) {
   ov.innerHTML = `<div class="emblem-modal dna-modal">
     <div class="modal-head"><h2>🧬 ${esc(m.name)}</h2><button class="ghost" data-dd-close>✕</button></div>
     <div class="modal-body">
+      <div class="dna-links">
+        ${m.detail_url ? `<a href="${esc(m.detail_url)}" target="_blank" rel="noopener">🧬 MyHeritage'da aç (ağacı dahil) ↗</a>` : ""}
+        ${m.linked ? `<a href="#" data-goto-linked="${m.linked.id}">🔗 Ağaçta: ${esc(m.linked.name)}</a>` : ""}
+      </div>
       <div class="detail-grid">${summary}</div>
       <div class="dna-analysis-box"><h3 class="dna-sec-title">🔎 Analiz</h3>
         <div id="dna-analysis" class="muted">Yükleniyor…</div></div>
@@ -1847,6 +1851,10 @@ async function openDnaDetail(id) {
     </div>
   </div>`;
   ov.querySelector("[data-dd-close]").addEventListener("click", () => ov.classList.add("hidden"));
+  ov.querySelector("[data-goto-linked]")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    gotoPersonFromDna(Number(e.currentTarget.dataset.gotoLinked));
+  });
   renderDnaAnalysis(m);
   renderDnaLink(m);
   ov.classList.remove("hidden");
