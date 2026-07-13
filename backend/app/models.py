@@ -189,6 +189,11 @@ class DnaMatch(Base):
     tree_size: Mapped[str] = mapped_column(String(40), default="")
     gender: Mapped[str] = mapped_column(String(1), default="U")
     raw: Mapped[str] = mapped_column(Text, default="")
+    # Detay (tek tek çekilen): match GUID, detay URL'i ve tüm detay JSON'u
+    match_guid: Mapped[str] = mapped_column(String(120), default="", index=True)
+    detail_url: Mapped[str] = mapped_column(Text, default="")
+    detail_json: Mapped[str] = mapped_column(Text, default="")
+    detail_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Sonradan sistemdeki bir kişiye bağlamak için (eşleştirme testleri)
     individual_id: Mapped[int | None] = mapped_column(
         ForeignKey("individuals.id", ondelete="SET NULL"), nullable=True

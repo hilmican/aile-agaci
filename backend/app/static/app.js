@@ -1757,9 +1757,10 @@ async function loadDna() {
     $("#dna-list").innerHTML = '<p class="muted">Henüz DNA eşleşmesi çekilmedi.</p>';
   } else {
     $("#dna-list").innerHTML = `<table class="dna-table">
-      <tr><th>İsim</th><th>Akrabalık</th><th>Paylaşılan DNA</th><th>Bölüm</th>
+      <tr><th></th><th>İsim</th><th>Akrabalık</th><th>Paylaşılan DNA</th><th>Bölüm</th>
         <th>En büyük</th><th>Ülke</th><th>Ağaç</th><th>Smart</th></tr>
-      ${d.items.map((m) => `<tr>
+      ${d.items.map((m) => `<tr class="dna-row" data-id="${m.id}">
+        <td title="${m.has_detail ? "Detay çekildi" : "Detay yok"}">${m.has_detail ? "📄" : ""}</td>
         <td><span class="sex-dot ${esc(m.gender)}"></span> ${esc(m.name)}
           ${m.manager ? `<div class="dna-mgr">yön: ${esc(m.manager)}</div>` : ""}</td>
         <td>${esc(m.relationship)}</td>
@@ -1771,12 +1772,73 @@ async function loadDna() {
         <td>${esc(m.smart_matches)}</td>
       </tr>`).join("")}
     </table>`;
+    $$("#dna-list .dna-row").forEach((r) =>
+      r.addEventListener("click", () => openDnaDetail(Number(r.dataset.id))));
+  }
+  if (d.undetailed !== undefined) {
+    $("#dna-count").textContent = `${d.total} eşleşme · ${d.total - d.undetailed} detaylı`;
   }
   const from = d.total ? dnaState.offset + 1 : 0;
   const to = Math.min(dnaState.offset + dnaState.limit, d.total);
   $("#dna-page-info").textContent = `${from}–${to} / ${d.total}`;
   $("#dna-prev").disabled = dnaState.offset === 0;
   $("#dna-next").disabled = to >= d.total;
+}
+
+// Eşleşme detay popup'ı: özet + yakalanan detay bölümleri (ham JSON, katlanır).
+const DNA_SECTION_TR = {
+  dna_single_match_get_shared_segments: "Paylaşılan segmentler (kromozom)",
+  dna_single_match_get_shared_matches: "Ortak DNA eşleşmeleri",
+  dna_single_match_get_shared_surnames: "Ortak soyadlar",
+  dna_single_match_get_shared_ancestral_places: "Ortak ata mekânları",
+  dna_single_match_get_theories_of_family_relativity: "Theory of Family Relativity",
+  dna_single_match_get_shared_smart_matches: "Ortak Smart Match'ler",
+  dna_single_match_get_kit_pedigree_chart: "Senin soyağacın (kit)",
+  dna_single_match_get_other_kit_pedigree_chart: "Eşleşmenin soyağacı",
+  fetch_dna_match_notes_and_labels: "Notlar ve etiketler",
+};
+
+async function openDnaDetail(id) {
+  const m = await api("/api/dna/" + id);
+  let ov = $("#dna-detail");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "dna-detail";
+    ov.className = "modal-backdrop hidden";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); });
+  }
+  const summary = [
+    ["Akrabalık", m.relationship], ["Paylaşılan DNA", `${m.shared_cm} cM (${m.match_quality_pct}%)`],
+    ["Paylaşılan bölüm", m.shared_segments], ["En büyük parça", `${m.largest_segment_cm} cM`],
+    ["Yaş", m.age], ["Ülke", m.country], ["Ağaç boyu", m.tree_size],
+    ["Smart Match", m.smart_matches], ["Yöneten", m.manager],
+  ].filter(([, v]) => (v || "").toString().trim() && v !== " cM (%)")
+    .map(([k, v]) => `<div class="field"><span class="k">${esc(k)}</span><div>${esc(v)}</div></div>`).join("");
+
+  let sections = '<p class="muted">Detay henüz çekilmedi. (Crawler: dna_detail_crawler.py)</p>';
+  const eps = m.detail && m.detail.endpoints;
+  if (eps) {
+    sections = Object.entries(eps).map(([key, val]) => `<details class="dna-section">
+      <summary>${esc(DNA_SECTION_TR[key] || key)}</summary>
+      <pre>${esc(JSON.stringify(val, null, 1).slice(0, 20000))}</pre>
+    </details>`).join("");
+    const dom = m.detail.dom || {};
+    if (dom.full_text) {
+      sections += `<details class="dna-section"><summary>Sayfa metni (ham)</summary>
+        <pre>${esc((dom.full_text || "").slice(0, 6000))}</pre></details>`;
+    }
+  }
+  ov.innerHTML = `<div class="emblem-modal dna-modal">
+    <div class="modal-head"><h2>🧬 ${esc(m.name)}</h2><button class="ghost" data-dd-close>✕</button></div>
+    <div class="modal-body">
+      <div class="detail-grid">${summary}</div>
+      <h3 class="dna-sec-title">Detaylar ${m.detail_at ? `<span class="muted">(${esc(fmtAgo(m.detail_at))})</span>` : ""}</h3>
+      ${sections}
+    </div>
+  </div>`;
+  ov.querySelector("[data-dd-close]").addEventListener("click", () => ov.classList.add("hidden"));
+  ov.classList.remove("hidden");
 }
 
 /* ---- Toplu işlemler ---- */

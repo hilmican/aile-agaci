@@ -5,6 +5,8 @@ from fastapi import APIRouter, Body, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timezone
+
 from ..activity import log_activity
 from ..database import get_db
 from ..models import DnaMatch, User
@@ -59,6 +61,10 @@ def import_matches(
         row.tree_size = mm.get("tree_size", "")
         gc = mm.get("gender_class", "") or ""
         row.gender = "F" if "gender_F" in gc else ("M" if "gender_M" in gc else "U")
+        if mm.get("detail_href"):
+            row.detail_url = mm["detail_href"]
+        if mm.get("match_guid"):
+            row.match_guid = mm["match_guid"]
         row.raw = json.dumps(mm, ensure_ascii=False)
         imported += 1
     db.flush()
@@ -68,6 +74,67 @@ def import_matches(
                      f"{imported} DNA eşleşmesi çekildi (toplam {total})")
     db.commit()
     return {"imported": imported, "total": total}
+
+
+@router.post("/detail")
+def save_detail(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    """Bir eşleşmenin detay JSON'unu (segmentler, ortak eşleşmeler vb.) saklar.
+    match_guid veya id ile bulur."""
+    detail = payload.get("detail")
+    guid = (payload.get("match_guid") or "").strip()
+    mid = payload.get("id")
+    row = None
+    if mid:
+        row = db.get(DnaMatch, int(mid))
+    elif guid:
+        row = db.scalar(select(DnaMatch).where(DnaMatch.match_guid == guid))
+    if row is None:
+        return {"ok": False, "error": "Eşleşme bulunamadı"}
+    row.detail_json = json.dumps(detail, ensure_ascii=False)
+    row.detail_at = datetime.now(timezone.utc)
+    if payload.get("detail_url"):
+        row.detail_url = payload["detail_url"]
+    log_activity(db, user, "dna_detail", None, f"{row.name} detayları çekildi")
+    db.commit()
+    return {"ok": True, "id": row.id, "name": row.name}
+
+
+@router.get("/next-undetailed")
+def next_undetailed(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Detayı henüz çekilmemiş, cM'si en yüksek eşleşme (crawler sırası için)."""
+    row = db.scalar(
+        select(DnaMatch).where(DnaMatch.detail_at.is_(None), DnaMatch.detail_url != "")
+        .order_by(DnaMatch.shared_cm_val.desc().nullslast(), DnaMatch.id)
+    )
+    if row is None:
+        return {"done": True}
+    return {"done": False, "id": row.id, "name": row.name, "detail_url": row.detail_url,
+            "match_guid": row.match_guid}
+
+
+@router.get("/{match_id}")
+def get_match(match_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    r = db.get(DnaMatch, match_id)
+    if r is None:
+        return {"error": "yok"}
+    out = {
+        "id": r.id, "name": r.name, "manager": r.manager, "relationship": r.relationship,
+        "shared_cm": r.shared_cm, "shared_segments": r.shared_segments,
+        "largest_segment_cm": r.largest_segment_cm, "match_quality_pct": r.match_quality_pct,
+        "age": r.age, "country": r.country, "smart_matches": r.smart_matches,
+        "tree_size": r.tree_size, "gender": r.gender, "match_guid": r.match_guid,
+        "detail_url": r.detail_url, "has_detail": bool(r.detail_json),
+        "detail_at": r.detail_at.isoformat() if r.detail_at else None,
+    }
+    try:
+        out["detail"] = json.loads(r.detail_json) if r.detail_json else None
+    except Exception:
+        out["detail"] = None
+    return out
 
 
 @router.get("")
@@ -89,6 +156,8 @@ def list_matches(
         "match_quality_pct": r.match_quality_pct, "shared_cm": r.shared_cm,
         "shared_segments": r.shared_segments, "largest_segment_cm": r.largest_segment_cm,
         "age": r.age, "country": r.country, "smart_matches": r.smart_matches,
-        "tree_size": r.tree_size, "gender": r.gender,
+        "tree_size": r.tree_size, "gender": r.gender, "has_detail": bool(r.detail_json),
     } for r in rows]
-    return {"total": total, "offset": offset, "limit": limit, "items": items}
+    undetailed = db.scalar(
+        select(func.count()).select_from(DnaMatch).where(DnaMatch.detail_at.is_(None))) or 0
+    return {"total": total, "undetailed": undetailed, "offset": offset, "limit": limit, "items": items}

@@ -81,6 +81,10 @@ def ensure_schema() -> None:
         "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS death_lng DOUBLE PRECISION",
         "ALTER TABLE families ADD COLUMN IF NOT EXISTS emblem VARCHAR(120) NOT NULL DEFAULT ''",
         "ALTER TABLE families ALTER COLUMN emblem TYPE VARCHAR(120)",
+        "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS match_guid VARCHAR(120) NOT NULL DEFAULT ''",
+        "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_json TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_at TIMESTAMPTZ",
         # Eski serbest 'period' değerini başlangıç sütununa taşı (yalnız boşsa).
         "UPDATE residences SET period_start = period WHERE period_start = '' AND period <> ''",
     ]
