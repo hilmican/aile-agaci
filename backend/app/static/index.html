@@ -34,6 +34,7 @@
         <button class="tab" data-tab="map">Harita</button>
         <button class="tab editor-only hidden" data-tab="bulk">Toplu</button>
         <button class="tab" data-tab="dna">DNA</button>
+        <button class="tab" data-tab="gentree">Gen Ağacı</button>
         <button class="tab" data-tab="import">İçe Aktar</button>
         <button class="tab admin-only hidden" data-tab="users">Kullanıcılar</button>
       </nav>
@@ -78,6 +79,23 @@
           <span id="dna-page-info" class="muted"></span>
           <button id="dna-next" class="ghost">Sonraki →</button>
         </div>
+      </div>
+    </section>
+
+    <!-- Gen Ağacı: DNA eşleşmelerinin küme/soy görselleştirmesi -->
+    <section id="tab-gentree" class="tab-panel hidden">
+      <div class="list-page">
+        <div class="list-page-head">
+          <h1>Gen Ağacı</h1>
+          <span id="gen-summary" class="muted"></span>
+        </div>
+        <div class="gen-subnav">
+          <button class="gen-sub active" data-sub="network">🕸️ Küme Ağı</button>
+          <button class="gen-sub" data-sub="pedigree">🌳 Varsayımsal Soy</button>
+          <button class="gen-sub" data-sub="overlay">🔗 Ağaç Katmanı</button>
+        </div>
+        <div id="gen-legend" class="gen-legend"></div>
+        <div id="gen-view"></div>
       </div>
     </section>
 

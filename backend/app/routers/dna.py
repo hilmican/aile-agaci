@@ -386,6 +386,110 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
     }
 
 
+@router.get("/graph")
+def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Gen Ağacı verisi: detaylı eşleşmeler (düğüm) + ortak DNA (kenar) + taraf
+    kümesi + ağaç kesişimleri. Üç görünümü de (küme ağı, varsayımsal soy,
+    ağaç katmanı) tek kaynaktan besler."""
+    from collections import defaultdict
+    clusters = _cluster_sides(db)
+    rows = [r for r in db.scalars(select(DnaMatch)).all() if r.detail_json]
+
+    tree = {}
+    for p in db.scalars(select(Individual)).all():
+        tree.setdefault(_norm(f"{p.first_name} {p.last_name}"), p)
+
+    def _find_names(o, out, d=0):
+        if d > 9 or o is None:
+            return
+        if isinstance(o, dict):
+            nm = o.get("name")
+            if isinstance(nm, str):
+                out.append(nm)
+            for v in o.values():
+                _find_names(v, out, d + 1)
+        elif isinstance(o, list):
+            for v in o:
+                _find_names(v, out, d + 1)
+
+    nodes = []
+    idx = {}
+    shared_sets = {}
+    tree_links = defaultdict(list)  # individual_id -> [node index]
+    for r in rows:
+        nn = _norm(r.name)
+        try:
+            eps = (json.loads(r.detail_json) or {}).get("endpoints", {})
+        except Exception:
+            eps = {}
+        cl = clusters.get(nn, {})
+        eff = r.tofr_side or cl.get("side") or "unknown"
+        gen = _rel_to_gen(r.relationship)
+        linked = None
+        if r.individual_id:
+            ind = db.get(Individual, r.individual_id)
+            if ind:
+                linked = {"individual_id": ind.id, "name": f"{ind.first_name} {ind.last_name}".strip()}
+        # Pedigree kesişimi: eşleşmenin çektiğimiz soyağacındaki isimler ∩ bizim ağaç
+        ped = eps.get("dna_single_match_get_other_kit_pedigree_chart")
+        pnames = []
+        _find_names(ped.get("data") if isinstance(ped, dict) else ped, pnames)
+        overlap = []
+        for nm in pnames:
+            if not nm or nm == "Bilinmiyor":
+                continue
+            tp = tree.get(_norm(re.sub(r"\(.*?\)", "", nm)))
+            if tp:
+                overlap.append({"individual_id": tp.id,
+                                "name": f"{tp.first_name} {tp.last_name}".strip()})
+        # tekilleştir
+        seen = set(); ov = []
+        for o in overlap:
+            if o["individual_id"] not in seen:
+                seen.add(o["individual_id"]); ov.append(o)
+        i = len(nodes)
+        idx[nn] = i
+        nodes.append({
+            "id": r.id, "name": r.name, "cm": r.shared_cm_val or 0,
+            "side": eff, "seed": bool(r.tofr_side), "gen": gen,
+            "relationship": r.relationship, "linked": linked, "overlap": ov,
+        })
+        shared_sets[nn] = set(_norm(x) for x in _shared_names(eps))
+        if linked:
+            tree_links[linked["individual_id"]].append(i)
+        for o in ov:
+            if not linked or o["individual_id"] != linked["individual_id"]:
+                tree_links[o["individual_id"]].append(i)
+
+    # Kenarlar: bir eşleşme diğerini ortak-listesinde barındırıyorsa (match-match)
+    edges = set()
+    for nn, sset in shared_sets.items():
+        for other in sset:
+            if other in idx and other != nn:
+                a, b = sorted((idx[nn], idx[other]))
+                edges.add((a, b))
+
+    tl = []
+    for iid, nis in tree_links.items():
+        ind = db.get(Individual, iid)
+        if not ind:
+            continue
+        tl.append({
+            "individual_id": iid,
+            "name": f"{ind.first_name} {ind.last_name}".strip(),
+            "matches": [{"id": nodes[n]["id"], "name": nodes[n]["name"],
+                         "cm": nodes[n]["cm"], "side": nodes[n]["side"]} for n in nis],
+        })
+    tl.sort(key=lambda x: -len(x["matches"]))
+
+    counts = {"paternal": 0, "maternal": 0, "unknown": 0}
+    for n in nodes:
+        counts[n["side"]] = counts.get(n["side"], 0) + 1
+    return {"nodes": nodes, "edges": [[a, b] for a, b in edges],
+            "tree_links": tl, "counts": counts, "total_matches": db.scalar(
+                select(func.count()).select_from(DnaMatch)) or 0}
+
+
 @router.post("/{match_id}/link")
 def link_match(
     match_id: int,

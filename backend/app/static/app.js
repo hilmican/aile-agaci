@@ -156,6 +156,7 @@ $$(".tab").forEach((btn) => {
     if (tab === "map") openMap();
     if (tab === "bulk") openBulk();
     if (tab === "dna") openDna();
+    if (tab === "gentree") openGenTree();
   });
 });
 
@@ -204,6 +205,7 @@ async function applyHash() {
   if (tab === "map") { await openMap(); return true; }
   if (tab === "bulk") { await openBulk(); return true; }
   if (tab === "dna") { await openDna(); return true; }
+  if (tab === "gentree") { await openGenTree(); return true; }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
@@ -1973,6 +1975,149 @@ async function renderDnaLink(m) {
   const wrap = $("#dna-picker");
   wrap.className = "inline-form";
   wrap.append(picker.el, btn);
+}
+
+/* ---------------- Gen Ağacı (DNA görselleştirme) ---------------- */
+const GEN = { data: null, sub: "network" };
+const SIDE_COLOR = { paternal: "#5b9bd1", maternal: "#dd8ba1", unknown: "#b6b6be" };
+const SIDE_LABEL = { paternal: "Baba tarafı", maternal: "Anne tarafı", unknown: "Belirsiz" };
+
+async function openGenTree() {
+  switchTab("gentree");
+  const view = $("#gen-view");
+  view.innerHTML = '<p class="muted">Yükleniyor…</p>';
+  try {
+    GEN.data = await api("/api/dna/graph");
+  } catch (e) {
+    view.innerHTML = '<p class="muted">Veri alınamadı.</p>';
+    return;
+  }
+  const c = GEN.data.counts;
+  $("#gen-summary").textContent =
+    `${GEN.data.nodes.length} detaylı düğüm / ${GEN.data.total_matches} eşleşme · ` +
+    `Baba ${c.paternal} · Anne ${c.maternal} · Belirsiz ${c.unknown}`;
+  renderGenLegend();
+  renderGenSub();
+}
+
+$$(".gen-sub").forEach((b) => b.addEventListener("click", () => {
+  GEN.sub = b.dataset.sub;
+  $$(".gen-sub").forEach((x) => x.classList.toggle("active", x === b));
+  renderGenLegend();
+  renderGenSub();
+}));
+
+function renderGenLegend() {
+  const items = [[SIDE_COLOR.paternal, "Baba tarafı"], [SIDE_COLOR.maternal, "Anne tarafı"],
+                 [SIDE_COLOR.unknown, "Belirsiz"]];
+  let extra = "";
+  if (GEN.sub === "network")
+    extra = `<span class="gen-leg"><span class="ring gold"></span>ağaca bağlı</span>` +
+            `<span class="gen-leg"><span class="ring green"></span>ağaç kesişimi</span>`;
+  $("#gen-legend").innerHTML =
+    items.map(([c, l]) => `<span class="gen-leg"><span class="dot" style="background:${c}"></span>${l}</span>`).join("") + extra;
+}
+
+function renderGenSub() {
+  const g = GEN.data, view = $("#gen-view");
+  view.innerHTML = "";
+  if (!g || !g.nodes.length) { view.innerHTML = '<p class="muted">Henüz detaylı eşleşme yok. Detaylar çekildikçe burası dolacak.</p>'; return; }
+  if (GEN.sub === "network") renderGenNetwork(g, view);
+  else if (GEN.sub === "pedigree") renderGenPedigree(g, view);
+  else renderGenOverlay(g, view);
+}
+
+function renderGenNetwork(g, view) {
+  const W = view.clientWidth || 900, H = 580;
+  const svg = d3.select(view).append("svg").attr("class", "gen-svg")
+    .attr("viewBox", [0, 0, W, H]).attr("width", "100%").attr("height", H);
+  const root = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.2, 4]).on("zoom", (e) => root.attr("transform", e.transform)));
+  const nodes = g.nodes.map((n) => ({ ...n }));
+  const links = g.edges.map(([a, b]) => ({ source: a, target: b }));
+  const rad = (n) => 5 + Math.min(18, Math.sqrt(n.cm || 1) * 0.9);
+  const sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).distance(60).strength(0.4))
+    .force("charge", d3.forceManyBody().strength(-150))
+    .force("center", d3.forceCenter(W / 2, H / 2))
+    .force("collide", d3.forceCollide().radius((n) => rad(n) + 5));
+  const link = root.append("g").attr("stroke", "#8886")
+    .selectAll("line").data(links).join("line");
+  const node = root.append("g").selectAll("g").data(nodes).join("g")
+    .style("cursor", "pointer")
+    .call(d3.drag()
+      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on("click", (e, d) => openDnaDetail(d.id));
+  node.append("circle").attr("r", rad)
+    .attr("fill", (n) => SIDE_COLOR[n.side] || SIDE_COLOR.unknown)
+    .attr("stroke", (n) => n.linked ? "#e0a400" : (n.overlap && n.overlap.length ? "#3a9d4a" : "#fff"))
+    .attr("stroke-width", (n) => (n.linked || (n.overlap && n.overlap.length)) ? 3 : 1.5);
+  node.append("title").text((n) => `${n.name}\n${Math.round(n.cm)} cM · ${SIDE_LABEL[n.side]}${n.seed ? " (ToFR)" : ""}` +
+    `${n.linked ? "\n↳ ağaç: " + n.linked.name : ""}${n.overlap && n.overlap.length ? "\n∩ " + n.overlap.map((o) => o.name).join(", ") : ""}`);
+  node.append("text").text((n) => n.name.length > 16 ? n.name.slice(0, 15) + "…" : n.name)
+    .attr("x", (n) => rad(n) + 3).attr("y", 3).attr("class", "gen-nlabel");
+  sim.on("tick", () => {
+    link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
+        .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+    node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+  });
+}
+
+function renderGenPedigree(g, view) {
+  const W = view.clientWidth || 900;
+  const genOf = (n) => n.gen || 2;
+  const maxGen = Math.max(3, ...g.nodes.map(genOf));
+  const rowH = 82, H = (maxGen + 1) * rowH + 30;
+  const svg = d3.select(view).append("svg").attr("class", "gen-svg")
+    .attr("viewBox", [0, 0, W, H]).attr("width", "100%").attr("height", H);
+  const yOf = (gen) => H - 28 - gen * rowH;
+  const cols = { paternal: W * 0.26, maternal: W * 0.74, unknown: W * 0.5 };
+  for (let gen = 1; gen <= maxGen; gen++) {
+    svg.append("line").attr("x1", 0).attr("x2", W).attr("y1", yOf(gen) + 34).attr("y2", yOf(gen) + 34)
+      .attr("stroke", "#8883").attr("stroke-dasharray", "3 4");
+    svg.append("text").attr("x", 6).attr("y", yOf(gen) - 22).attr("class", "gen-axis").text(`~${gen}. nesil ortak ata`);
+  }
+  const groups = {};
+  g.nodes.forEach((n) => { const k = (n.side || "unknown") + ":" + genOf(n); (groups[k] = groups[k] || []).push(n); });
+  Object.entries(groups).forEach(([key, arr]) => {
+    const [side, genS] = key.split(":"); const gen = +genS, cx = cols[side] || cols.unknown;
+    arr.forEach((n, i) => {
+      const x = cx + (i - (arr.length - 1) / 2) * 98, y = yOf(gen);
+      svg.insert("line", ":first-child").attr("x1", W / 2).attr("y1", yOf(0))
+        .attr("x2", x).attr("y2", y).attr("stroke", SIDE_COLOR[side]).attr("stroke-opacity", 0.22);
+      const grp = svg.append("g").attr("transform", `translate(${x},${y})`).style("cursor", "pointer")
+        .on("click", () => openDnaDetail(n.id));
+      grp.append("rect").attr("x", -46).attr("y", -17).attr("width", 92).attr("height", 34).attr("rx", 8)
+        .attr("fill", SIDE_COLOR[side]).attr("fill-opacity", 0.16).attr("stroke", SIDE_COLOR[side]);
+      grp.append("text").attr("text-anchor", "middle").attr("y", -2).attr("class", "gen-chip-t")
+        .text(n.name.length > 13 ? n.name.slice(0, 12) + "…" : n.name);
+      grp.append("text").attr("text-anchor", "middle").attr("y", 11).attr("class", "gen-chip-cm")
+        .text(`${Math.round(n.cm)} cM`);
+    });
+  });
+  const self = svg.append("g").attr("transform", `translate(${W / 2},${yOf(0)})`);
+  self.append("rect").attr("x", -28).attr("y", -15).attr("width", 56).attr("height", 30).attr("rx", 9).attr("class", "gen-self");
+  self.append("text").attr("text-anchor", "middle").attr("y", 5).attr("class", "gen-self-t").text("SEN");
+}
+
+function renderGenOverlay(g, view) {
+  if (!g.tree_links.length) {
+    view.innerHTML = '<p class="muted">Henüz ağaçla kesişen eşleşme yok. Eşleşmeleri ağaç kişilerine bağladıkça (DNA sekmesi) ya da ortak atalı pedigree çekildikçe burada görünür.</p>';
+    return;
+  }
+  const rows = g.tree_links.map((t) => {
+    const chips = t.matches.map((m) =>
+      `<span class="gen-mchip" style="border-color:${SIDE_COLOR[m.side] || SIDE_COLOR.unknown}" ` +
+      `onclick="openDnaDetail(${m.id})">${esc(m.name)} · ${Math.round(m.cm)}cM</span>`).join(" ");
+    return `<div class="gen-ov-row">
+      <div class="gen-ov-person"><b>${esc(t.name)}</b>
+        <button class="ghost sm" onclick="location.hash='#tab=tree&root=${t.individual_id}&depth=3'">Ağaçta göster →</button></div>
+      <div class="gen-ov-matches"><span class="muted">${t.matches.length} eşleşme:</span> ${chips}</div>
+    </div>`;
+  }).join("");
+  view.innerHTML = `<div class="gen-ov">${rows}</div>`;
 }
 
 /* ---- Toplu işlemler ---- */

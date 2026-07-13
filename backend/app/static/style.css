@@ -373,3 +373,28 @@ label input, label select { color: var(--ink); }
 /* Toast */
 .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 0.7rem 1.2rem; border-radius: 8px; z-index: 100; }
 .toast.err { background: var(--danger); }
+
+/* ---------------- Gen Ağacı ---------------- */
+.gen-subnav { display: flex; gap: 0.4rem; margin: 0.6rem 0; flex-wrap: wrap; }
+.gen-sub { padding: 0.4rem 0.85rem; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--ink); cursor: pointer; font-size: 0.9rem; }
+.gen-sub.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.gen-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.2rem 0 0.7rem; font-size: 0.8rem; color: var(--muted); }
+.gen-leg { display: inline-flex; align-items: center; gap: 0.35rem; }
+.gen-leg .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.gen-leg .ring { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
+.gen-leg .ring.gold { border: 3px solid #e0a400; }
+.gen-leg .ring.green { border: 3px solid #3a9d4a; }
+.gen-svg { width: 100%; background: #edebe6; border: 1px solid var(--border); border-radius: 12px; }
+.gen-nlabel { font-size: 10px; fill: var(--ink); pointer-events: none; }
+.gen-axis { font-size: 11px; fill: var(--muted); }
+.gen-chip-t { font-size: 11px; font-weight: 600; fill: var(--ink); pointer-events: none; }
+.gen-chip-cm { font-size: 9px; fill: var(--muted); pointer-events: none; }
+.gen-self { fill: var(--ink); }
+.gen-self-t { fill: #fff; font-weight: 700; font-size: 12px; }
+.gen-ov { display: flex; flex-direction: column; gap: 0.5rem; }
+.gen-ov-row { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.55rem 0.75rem; }
+.gen-ov-person { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
+.gen-ov-matches { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.gen-mchip { border: 1.5px solid #bbb; border-radius: 14px; padding: 0.15rem 0.55rem; font-size: 0.8rem; cursor: pointer; background: var(--bg); }
+.gen-mchip:hover { background: #4a7c5915; }
+button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
