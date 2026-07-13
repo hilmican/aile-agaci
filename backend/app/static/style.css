@@ -447,3 +447,16 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .sml { font-size: 0.75rem; }
 .gen-ctrl { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .gen-ctrl select { padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
+/* Ata Önerileri */
+.anc-note { font-size: 0.82rem; margin-bottom: 0.7rem; }
+.anc-sec { margin-bottom: 1rem; }
+.anc-row { border: 1px solid var(--border); border-radius: 9px; padding: 0.45rem 0.65rem; margin-bottom: 0.4rem; }
+.anc-row.new { border-left: 3px solid var(--accent); }
+.anc-row.known { opacity: 0.75; }
+.anc-main { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.anc-sub { margin-top: 0.15rem; }
+.anc-tag.ok { color: var(--accent); font-size: 0.75rem; }
+.anc-known { display: flex; flex-direction: column; gap: 0.25rem; }
+.anc-frontiers { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.3rem 0; }
+.anc-frontier { border: 1px solid var(--border); border-radius: 14px; padding: 0.2rem 0.6rem; font-size: 0.82rem; cursor: pointer; background: var(--panel); }
+.anc-frontier:hover { background: #4a7c5915; border-color: var(--accent); }

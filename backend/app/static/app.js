@@ -2055,6 +2055,7 @@ $$(".gen-sub").forEach((b) => b.addEventListener("click", () => {
 }));
 
 function renderGenLegend() {
+  if (GEN.sub === "ancestors") { $("#gen-legend").innerHTML = ""; return; }
   const items = [[SIDE_COLOR.paternal, "Baba tarafı"], [SIDE_COLOR.maternal, "Anne tarafı"],
                  [SIDE_COLOR.unknown, "Belirsiz"]];
   let extra = "";
@@ -2069,9 +2070,65 @@ function renderGenSub() {
   const g = GEN.data, view = $("#gen-view");
   view.innerHTML = "";
   if (!g || !g.nodes.length) { view.innerHTML = '<p class="muted">Henüz detaylı eşleşme yok. Detaylar çekildikçe burası dolacak.</p>'; return; }
+  if (GEN.sub === "ancestors") { renderGenAncestors(view); return; }
   if (GEN.sub === "network") renderGenNetwork(g, view);
   else if (GEN.sub === "pedigree") renderGenPedigree(g, view);
   else renderGenOverlay(g, view);
+}
+
+function parseAncestorName(nm) {
+  let maiden = "";
+  const md = nm.match(/\(\s*do[ğg]um\s+([^)]+)\)/i);
+  if (md) { maiden = md[1].trim(); nm = nm.replace(md[0], "").trim(); }
+  const parts = nm.split(/\s+/).filter(Boolean);
+  const last = parts.length > 1 ? parts.pop() : "";
+  return { first_name: parts.join(" "), last_name: last, maiden_name: maiden };
+}
+
+async function addAncestorToTree(name, btn) {
+  const p = parseAncestorName(name);
+  try {
+    const created = await api("/api/individuals", { method: "POST",
+      json: { ...p, notes: "DNA ata önerisinden eklendi" } });
+    toast("Ağaca eklendi: " + name);
+    if (btn) { btn.textContent = "✓ eklendi"; btn.disabled = true; }
+    // eklenen kişiye git (ağaçta bağlamak için)
+    setTimeout(() => { location.hash = `#tab=people&person=${created.id}`; }, 600);
+  } catch (e) { toast(e.message || "Eklenemedi"); }
+}
+
+async function renderGenAncestors(view) {
+  view.innerHTML = '<p class="muted">Yükleniyor…</p>';
+  let d;
+  try { d = await api("/api/dna/ancestor-suggestions"); }
+  catch (_) { view.innerHTML = '<p class="muted">Alınamadı.</p>'; return; }
+  const sug = d.suggestions || [];
+  const newOnes = sug.filter((s) => !s.in_tree);
+  const known = sug.filter((s) => s.in_tree);
+  const sRow = (s) => `<div class="anc-row ${s.in_tree ? "known" : "new"}">
+    <div class="anc-main">
+      <b>${esc(s.name)}</b>
+      ${s.in_tree ? '<span class="anc-tag ok">✓ ağaçta</span>'
+        : `<button class="ghost sm" onclick="addAncestorToTree(${JSON.stringify(s.name).replace(/"/g, "&quot;")}, this)">+ Ağaca ekle</button>`}
+    </div>
+    <div class="anc-sub muted sml">${s.support} eşleşme destekli${s.positions.length ? " · " + esc(s.positions.join(", ")) : ""}${s.matches.length ? " · " + esc(s.matches.slice(0, 4).join(", ")) : ""}</div>
+  </div>`;
+  const fRow = (f) => `<span class="anc-frontier" onclick="location.hash='#tab=tree&root=${f.individual_id}&dir=up&depth=3'" title="ağaçta göster (yukarı)">${esc(f.name)}${f.birth_date ? ` <span class="muted">${esc(f.birth_date)}</span>` : ""}</span>`;
+  view.innerHTML = `
+    <div class="anc-note muted">Ağacı <b>yukarı genişletmek</b> için: DNA'daki ata isimleri (soyadı-eşleşen yakın akrabaların ağaçlarından) + ağacının uçları. Şu an derin-ata verisi az — limit açılıp daha çok yakın akraba çekildikçe artar.</div>
+    <div class="anc-sec">
+      <div class="an-label">🌱 DNA ata önerileri — ağaçta olmayan (${d.new_count})</div>
+      ${newOnes.length ? newOnes.map(sRow).join("") : '<p class="muted sml">Ağaçta olmayan yeni ata adayı yok. (Yakın akrabaların soyadları zaten ağaçta.)</p>'}
+    </div>
+    <div class="anc-sec">
+      <div class="an-label">DNA'nın doğruladığı, ağaçta olan atalar (${known.length})</div>
+      <div class="anc-known">${known.map(sRow).join("") || '<span class="muted sml">—</span>'}</div>
+    </div>
+    <div class="anc-sec">
+      <div class="an-label">🌳 Ağaç uçları — genişletme noktaları (${d.frontier_count})</div>
+      <div class="anc-frontiers">${(d.frontier || []).filter((f) => f.surname).slice(0, 60).map(fRow).join("")}</div>
+      <div class="muted sml">Ebeveyni girilmemiş atalar. Tıkla → ağaçta yukarı bak; üstüne ebeveyn ekleyerek genişlet.</div>
+    </div>`;
 }
 
 function renderGenNetwork(g, view) {

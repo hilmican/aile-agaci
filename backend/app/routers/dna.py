@@ -584,6 +584,67 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
                 select(func.count()).select_from(DnaMatch)) or 0}
 
 
+@router.get("/ancestor-suggestions")
+def ancestor_suggestions(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Ağacı YUKARI genişletmek için: (1) ağaç uçları (ebeveyni olmayan atalar =
+    genişletme noktaları), (2) DNA'dan ata adayları (shared_surnames'deki ata
+    isimleri — ağaçta olmayanlar). Kaç eşleşme desteklediği + pozisyon ipucu ile."""
+    from collections import defaultdict
+    byname, parents_ids, id2ind = _tree_index(db)
+    intree = set(byname.keys())
+
+    # Ağaç uçları: ebeveyni olmayan, adı olan kişiler (soyadı olanlar önce)
+    have_child_parent = set(parents_ids.keys())
+    frontier = []
+    for p in id2ind.values():
+        nm = f"{p.first_name} {p.last_name}".strip()
+        if p.id in have_child_parent or not nm:
+            continue
+        frontier.append({"individual_id": p.id, "name": nm,
+                         "surname": (p.last_name or "").strip(),
+                         "birth_date": p.birth_date or ""})
+    frontier.sort(key=lambda x: (not x["surname"], x["name"]))
+
+    # DNA ata adayları: tüm detaylı eşleşmelerin shared_surnames ata isimleri
+    cand = defaultdict(lambda: {"support": 0, "positions": set(), "matches": set(), "name": ""})
+    for r in db.scalars(select(DnaMatch).where(DnaMatch.detail_json != "")).all():
+        try:
+            eps = (json.loads(r.detail_json) or {}).get("endpoints", {})
+        except Exception:
+            continue
+        for grp in _dig(eps, "dna_single_match_get_shared_surnames",
+                        "data", "dna_match", "surname_matches", "data") or []:
+            for a in _dig(grp, "individual_ancestors", "data") or []:
+                nm = _dig(a, "individual", "name") or ""
+                k = _norm(nm)
+                if not k or "bilinmiyor" in k:
+                    continue
+                c = cand[k]
+                c["support"] += 1
+                c["name"] = nm
+                pos = a.get("relationship_description", "")
+                if pos:
+                    c["positions"].add(pos)
+                c["matches"].add(r.name)
+    suggestions = []
+    for k, c in cand.items():
+        tp = byname.get(k)
+        suggestions.append({
+            "name": c["name"], "norm": k,
+            "support": c["support"], "positions": sorted(c["positions"])[:3],
+            "matches": sorted(c["matches"])[:6],
+            "in_tree": bool(tp),
+            "individual_id": tp[0].id if tp else None,
+        })
+    suggestions.sort(key=lambda x: (x["in_tree"], -x["support"]))
+    return {
+        "frontier": frontier,
+        "frontier_count": len(frontier),
+        "suggestions": suggestions,
+        "new_count": sum(1 for s in suggestions if not s["in_tree"]),
+    }
+
+
 @router.post("/{match_id}/side")
 def set_side(match_id: int, payload: dict = Body(...),
              db: Session = Depends(get_db), user: User = Depends(require_editor)):
