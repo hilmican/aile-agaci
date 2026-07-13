@@ -2075,36 +2075,74 @@ function renderGenSub() {
 }
 
 function renderGenNetwork(g, view) {
-  const W = view.clientWidth || 900, H = 580;
+  GEN.netTop = GEN.netTop || 40;
+  const ctrl = document.createElement("div");
+  ctrl.className = "gen-ctrl";
+  ctrl.innerHTML =
+    `<span class="muted sml">Bu eşleşmeler tek yoğun baba-tarafı ağı — ayrık küme yok (birkaç yakın akraba herkesi bağlar). Bir düğümün üstüne gel → yalnız onunla ortak olanlar kalır. 🟢 ağaç kesişimi = asıl anlamlı olanlar.</span>
+     <label class="sml">Göster: <select id="net-top">
+       <option value="40">En yakın 40</option><option value="80">En yakın 80</option>
+       <option value="150">En yakın 150</option><option value="99999">Tümü (yoğun)</option></select></label>`;
+  view.appendChild(ctrl);
+  $("#net-top").value = String(GEN.netTop);
+  $("#net-top").addEventListener("change", (e) => { GEN.netTop = +e.target.value; renderGenSub(); });
+
+  // En yakın N (cM) + her zaman ağaç-kesişimi/bağlı olanlar
+  const keep = new Set();
+  g.nodes.map((n, i) => [n.cm || 0, i]).sort((a, b) => b[0] - a[0])
+    .slice(0, GEN.netTop).forEach(([, i]) => keep.add(i));
+  g.nodes.forEach((n, i) => { if (n.linked || (n.overlap && n.overlap.length)) keep.add(i); });
+  const nodes = g.nodes.map((n, i) => ({ ...n, _i: i })).filter((n) => keep.has(n._i));
+  const byI = new Map(nodes.map((n) => [n._i, n]));
+  const L = g.edges.filter(([a, b]) => byI.has(a) && byI.has(b))
+    .map(([a, b]) => ({ source: byI.get(a), target: byI.get(b) }));
+  const nbr = new Map(nodes.map((n) => [n._i, new Set()]));
+  L.forEach((l) => { nbr.get(l.source._i).add(l.target._i); nbr.get(l.target._i).add(l.source._i); });
+  const showLabels = nodes.length <= 90;
+
+  const W = view.clientWidth || 900, H = 560;
   const svg = d3.select(view).append("svg").attr("class", "gen-svg")
     .attr("viewBox", [0, 0, W, H]).attr("width", "100%").attr("height", H);
-  const root = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.2, 4]).on("zoom", (e) => root.attr("transform", e.transform)));
-  const nodes = g.nodes.map((n) => ({ ...n }));
-  const links = g.edges.map(([a, b]) => ({ source: a, target: b }));
-  const rad = (n) => 5 + Math.min(18, Math.sqrt(n.cm || 1) * 0.9);
+  const rootG = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.2, 5]).on("zoom", (e) => rootG.attr("transform", e.transform)));
+  const rad = (n) => 5 + Math.min(16, Math.sqrt(n.cm || 1) * 0.8);
   const sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).distance(60).strength(0.4))
-    .force("charge", d3.forceManyBody().strength(-150))
+    .force("link", d3.forceLink(L).distance(55).strength(0.35))
+    .force("charge", d3.forceManyBody().strength(-170))
     .force("center", d3.forceCenter(W / 2, H / 2))
-    .force("collide", d3.forceCollide().radius((n) => rad(n) + 5));
-  const link = root.append("g").attr("stroke", "#8886")
-    .selectAll("line").data(links).join("line");
-  const node = root.append("g").selectAll("g").data(nodes).join("g")
+    .force("collide", d3.forceCollide().radius((n) => rad(n) + 4));
+  const link = rootG.append("g").attr("stroke", "#8886")
+    .selectAll("line").data(L).join("line");
+  const node = rootG.append("g").selectAll("g").data(nodes).join("g")
     .style("cursor", "pointer")
     .call(d3.drag()
       .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
       .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
       .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
-    .on("click", (e, d) => openDnaDetail(d.id));
+    .on("click", (e, d) => openDnaDetail(d.id))
+    .on("mouseenter", (e, d) => focusNode(d._i))
+    .on("mouseleave", () => focusNode(null));
   node.append("circle").attr("r", rad)
     .attr("fill", (n) => SIDE_COLOR[n.side] || SIDE_COLOR.unknown)
     .attr("stroke", (n) => n.linked ? "#e0a400" : (n.overlap && n.overlap.length ? "#3a9d4a" : "#fff"))
-    .attr("stroke-width", (n) => (n.linked || (n.overlap && n.overlap.length)) ? 3 : 1.5);
+    .attr("stroke-width", (n) => (n.linked || (n.overlap && n.overlap.length)) ? 3 : 1.2);
   node.append("title").text((n) => `${n.name}\n${Math.round(n.cm)} cM · ${SIDE_LABEL[n.side]}${n.seed ? " (ToFR)" : ""}` +
     `${n.linked ? "\n↳ ağaç: " + n.linked.name : ""}${n.overlap && n.overlap.length ? "\n∩ " + n.overlap.map((o) => o.name).join(", ") : ""}`);
-  node.append("text").text((n) => n.name.length > 16 ? n.name.slice(0, 15) + "…" : n.name)
-    .attr("x", (n) => rad(n) + 3).attr("y", 3).attr("class", "gen-nlabel");
+  if (showLabels)
+    node.append("text").text((n) => n.name.length > 16 ? n.name.slice(0, 15) + "…" : n.name)
+      .attr("x", (n) => rad(n) + 3).attr("y", 3).attr("class", "gen-nlabel");
+
+  function focusNode(i) {
+    if (i == null) {
+      node.style("opacity", 1);
+      link.style("opacity", 1).attr("stroke", "#8886");
+      return;
+    }
+    const ns = nbr.get(i);
+    node.style("opacity", (n) => (n._i === i || ns.has(n._i)) ? 1 : 0.1);
+    link.style("opacity", (l) => (l.source._i === i || l.target._i === i) ? 0.95 : 0.03)
+        .attr("stroke", (l) => (l.source._i === i || l.target._i === i) ? "#4a7c59" : "#8886");
+  }
   sim.on("tick", () => {
     link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
         .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);

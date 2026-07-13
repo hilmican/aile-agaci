@@ -445,3 +445,5 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .mt-rel { font-size: 0.64rem; color: var(--muted); font-weight: 400; }
 .mt-ext { font-size: 0.78rem; margin-left: 0.4rem; white-space: nowrap; }
 .sml { font-size: 0.75rem; }
+.gen-ctrl { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.gen-ctrl select { padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
