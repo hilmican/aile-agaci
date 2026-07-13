@@ -1492,7 +1492,7 @@ $("#zoom-full").addEventListener("click", () => {
   const el = $("#tab-tree");
   if (nativeFsElement()) { exitNativeFs(); return; }
   if (el.classList.contains("pseudo-fullscreen")) {         // sözde tam ekrandan çık
-    el.classList.remove("pseudo-fullscreen");
+    el.classList.remove("pseudo-fullscreen", "tree-fs");
     $("#zoom-full").classList.remove("active");
     setTimeout(() => fitTree(false), 80);
     return;
@@ -1500,15 +1500,18 @@ $("#zoom-full").addEventListener("click", () => {
   if (el.requestFullscreen) el.requestFullscreen();
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   else {                                                    // iPhone Safari fallback
-    el.classList.add("pseudo-fullscreen");
+    el.classList.add("pseudo-fullscreen", "tree-fs");
     $("#zoom-full").classList.add("active");
     setTimeout(() => fitTree(false), 80);
   }
 });
 // Tam ekrana gir/çıkınca kanvas boyutu değişir → görünümü yeniden sığdır.
+// tree-fs sınıfı (native ya da sözde) iç düzeni kontrol eder.
 ["fullscreenchange", "webkitfullscreenchange"].forEach((ev) =>
   document.addEventListener(ev, () => {
-    $("#zoom-full").classList.toggle("active", !!nativeFsElement());
+    const on = !!nativeFsElement();
+    $("#tab-tree").classList.toggle("tree-fs", on);
+    $("#zoom-full").classList.toggle("active", on);
     setTimeout(() => fitTree(false), 80);
   }));
 
