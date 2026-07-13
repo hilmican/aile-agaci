@@ -1749,6 +1749,25 @@ async function openDna() {
     });
   }
   loadDna();
+  refreshDnaProgress();
+}
+
+// Canlı detay-çekim ilerlemesi (arka plandaki crawler'ı UI'dan izlemek için)
+let dnaProgTimer = null;
+async function refreshDnaProgress() {
+  const els = $$(".dna-progress");
+  if (!els.length) return;
+  let d;
+  try { d = await api("/api/dna?limit=1"); } catch (_) { return; }
+  const det = d.total - d.undetailed, pct = d.total ? Math.round(det * 100 / d.total) : 0;
+  const html = d.undetailed > 0
+    ? `<div class="dp-bar"><span style="width:${pct}%"></span></div>
+       <span class="dp-txt muted">🧬 Detay çekimi: <b>${det}</b> / ${d.total} (%${pct}) · ${d.undetailed} kaldı · <span class="dp-live">otomatik güncelleniyor</span></span>`
+    : `<span class="dp-txt muted">✔ Tüm ${d.total} eşleşmenin detayı çekildi.</span>`;
+  els.forEach((el) => { el.innerHTML = html; });
+  clearTimeout(dnaProgTimer);
+  const active = !$("#tab-dna").classList.contains("hidden") || !$("#tab-gentree").classList.contains("hidden");
+  if (active && d.undetailed > 0) dnaProgTimer = setTimeout(refreshDnaProgress, 20000);
 }
 
 async function loadDna() {
@@ -2013,6 +2032,7 @@ async function openGenTree() {
     `Baba ${c.paternal} · Anne ${c.maternal} · Belirsiz ${c.unknown}`;
   renderGenLegend();
   renderGenSub();
+  refreshDnaProgress();
 }
 
 $$(".gen-sub").forEach((b) => b.addEventListener("click", () => {

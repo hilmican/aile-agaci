@@ -428,3 +428,10 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .ped-unplaced .ped-col.unk { margin-top: 0.2rem; }
 .ped-selfrow { display: flex; justify-content: center; margin-top: 0.3rem; }
 .ped-self-box { background: var(--ink); color: #fff; font-weight: 700; padding: 0.4rem 1.2rem; border-radius: 10px; letter-spacing: 0.05em; }
+/* Canlı detay-çekim ilerlemesi */
+.dna-progress { margin: 0.3rem 0 0.6rem; }
+.dna-progress:empty { display: none; }
+.dp-bar { height: 8px; background: var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 0.25rem; }
+.dp-bar span { display: block; height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.6s ease; }
+.dp-txt { font-size: 0.8rem; }
+.dp-live { color: var(--accent); }
