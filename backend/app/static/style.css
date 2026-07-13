@@ -401,3 +401,30 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .an-sidebtns { display: flex; align-items: center; gap: 0.35rem; margin: 0.4rem 0; font-size: 0.82rem; color: var(--muted); flex-wrap: wrap; }
 .an-sidebtns button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .an-sidebtns .sml { font-size: 0.75rem; }
+/* Varsayımsal Soy — bantlı */
+.ped-note { font-size: 0.8rem; margin-bottom: 0.6rem; }
+.ped { display: flex; flex-direction: column; gap: 0.5rem; }
+.ped-colhead { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; padding: 0 0.3rem; }
+.ped-colhead .baba { color: #5b9bd1; } .ped-colhead .anne { color: #dd8ba1; }
+.ped-band { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.5rem 0.7rem; }
+.ped-glabel { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.4rem; }
+.ped-cols { display: grid; grid-template-columns: 1fr 12px 1fr; gap: 0.3rem; align-items: start; }
+.ped-mid { border-left: 1px dashed var(--border); }
+.ped-col { display: flex; flex-wrap: wrap; gap: 0.3rem; align-content: flex-start; }
+.ped-col.anne { justify-content: flex-end; }
+.ped-col.empty { color: var(--muted); opacity: 0.5; }
+.ped-chip { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.05;
+  border: 1.5px solid var(--sc, #bbb); border-left-width: 4px; border-radius: 7px; padding: 0.18rem 0.45rem;
+  background: var(--bg); cursor: pointer; max-width: 150px; }
+.ped-chip:hover { background: color-mix(in srgb, var(--sc) 12%, var(--bg)); }
+.ped-chip b { font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+.ped-chip i { font-size: 0.66rem; color: var(--muted); font-style: normal; }
+.ped-chip.chip-linked { box-shadow: 0 0 0 2px #e0a40088; }
+.ped-chip.chip-overlap { box-shadow: 0 0 0 2px #3a9d4a88; }
+.ped-more { align-self: center; font-size: 0.75rem; color: var(--accent); cursor: pointer; padding: 0.15rem 0.4rem;
+  border: 1px dashed var(--accent); border-radius: 12px; }
+.ped-hidden { display: none; }
+.ped-unplaced { border-color: #dd8ba1; background: #dd8ba10c; }
+.ped-unplaced .ped-col.unk { margin-top: 0.2rem; }
+.ped-selfrow { display: flex; justify-content: center; margin-top: 0.3rem; }
+.ped-self-box { background: var(--ink); color: #fff; font-weight: 700; padding: 0.4rem 1.2rem; border-radius: 10px; letter-spacing: 0.05em; }

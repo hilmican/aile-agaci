@@ -2081,40 +2081,62 @@ function renderGenNetwork(g, view) {
 }
 
 function renderGenPedigree(g, view) {
-  const W = view.clientWidth || 900;
   const genOf = (n) => n.gen || 2;
-  const maxGen = Math.max(3, ...g.nodes.map(genOf));
-  const rowH = 82, H = (maxGen + 1) * rowH + 30;
-  const svg = d3.select(view).append("svg").attr("class", "gen-svg")
-    .attr("viewBox", [0, 0, W, H]).attr("width", "100%").attr("height", H);
-  const yOf = (gen) => H - 28 - gen * rowH;
-  const cols = { paternal: W * 0.26, maternal: W * 0.74, unknown: W * 0.5 };
-  for (let gen = 1; gen <= maxGen; gen++) {
-    svg.append("line").attr("x1", 0).attr("x2", W).attr("y1", yOf(gen) + 34).attr("y2", yOf(gen) + 34)
-      .attr("stroke", "#8883").attr("stroke-dasharray", "3 4");
-    svg.append("text").attr("x", 6).attr("y", yOf(gen) - 22).attr("class", "gen-axis").text(`~${gen}. nesil ortak ata`);
-  }
-  const groups = {};
-  g.nodes.forEach((n) => { const k = (n.side || "unknown") + ":" + genOf(n); (groups[k] = groups[k] || []).push(n); });
-  Object.entries(groups).forEach(([key, arr]) => {
-    const [side, genS] = key.split(":"); const gen = +genS, cx = cols[side] || cols.unknown;
-    arr.forEach((n, i) => {
-      const x = cx + (i - (arr.length - 1) / 2) * 98, y = yOf(gen);
-      svg.insert("line", ":first-child").attr("x1", W / 2).attr("y1", yOf(0))
-        .attr("x2", x).attr("y2", y).attr("stroke", SIDE_COLOR[side]).attr("stroke-opacity", 0.22);
-      const grp = svg.append("g").attr("transform", `translate(${x},${y})`).style("cursor", "pointer")
-        .on("click", () => openDnaDetail(n.id));
-      grp.append("rect").attr("x", -46).attr("y", -17).attr("width", 92).attr("height", 34).attr("rx", 8)
-        .attr("fill", SIDE_COLOR[side]).attr("fill-opacity", 0.16).attr("stroke", SIDE_COLOR[side]);
-      grp.append("text").attr("text-anchor", "middle").attr("y", -2).attr("class", "gen-chip-t")
-        .text(n.name.length > 13 ? n.name.slice(0, 12) + "…" : n.name);
-      grp.append("text").attr("text-anchor", "middle").attr("y", 11).attr("class", "gen-chip-cm")
-        .text(`${Math.round(n.cm)} cM`);
-    });
+  // Bağlanamayanları (kümede tarafı çıkmayan) ayrı vurgula — muhtemel anne/farklı kol.
+  const placed = g.nodes.filter((n) => n.side === "paternal" || n.side === "maternal");
+  const unplaced = g.nodes.filter((n) => n.side !== "paternal" && n.side !== "maternal");
+  const maxGen = Math.max(3, ...placed.map(genOf));
+  const cell = {};  // gen -> {paternal:[], maternal:[]}
+  placed.forEach((n) => {
+    const gen = genOf(n);
+    (cell[gen] = cell[gen] || { paternal: [], maternal: [] })[n.side].push(n);
   });
-  const self = svg.append("g").attr("transform", `translate(${W / 2},${yOf(0)})`);
-  self.append("rect").attr("x", -28).attr("y", -15).attr("width", 56).attr("height", 30).attr("rx", 9).attr("class", "gen-self");
-  self.append("text").attr("text-anchor", "middle").attr("y", 5).attr("class", "gen-self-t").text("SEN");
+
+  const chip = (n) => {
+    const ring = n.linked ? "chip-linked" : (n.overlap && n.overlap.length ? "chip-overlap" : "");
+    return `<span class="ped-chip ${ring}" style="--sc:${SIDE_COLOR[n.side]}" onclick="openDnaDetail(${n.id})" ` +
+      `title="${esc(n.name)} · ${Math.round(n.cm)} cM${n.linked ? " · ağaç: " + esc(n.linked.name) : ""}">` +
+      `<b>${esc(n.name.length > 16 ? n.name.slice(0, 15) + "…" : n.name)}</b><i>${Math.round(n.cm)} cM</i></span>`;
+  };
+  const cellHtml = (arr, cls) => {
+    if (!arr.length) return `<div class="ped-col ${cls} empty">—</div>`;
+    arr.sort((a, b) => b.cm - a.cm);
+    const CAP = 18;
+    const head = arr.slice(0, CAP).map(chip).join("");
+    const rest = arr.length > CAP
+      ? `<span class="ped-hidden" style="display:none">${arr.slice(CAP).map(chip).join("")}</span>`
+        + `<span class="ped-more" onclick="this.previousElementSibling.style.display='contents';this.remove()">+${arr.length - CAP} daha…</span>`
+      : "";
+    return `<div class="ped-col ${cls}">${head}${rest}</div>`;
+  };
+
+  let bands = "";
+  for (let gen = maxGen; gen >= 1; gen--) {
+    const c = cell[gen] || { paternal: [], maternal: [] };
+    if (!c.paternal.length && !c.maternal.length) continue;
+    bands += `<div class="ped-band">
+      <div class="ped-glabel">~${gen}. nesil ortak ata <span class="muted">(${c.paternal.length + c.maternal.length})</span></div>
+      <div class="ped-cols">
+        ${cellHtml(c.paternal, "baba")}
+        <div class="ped-mid"></div>
+        ${cellHtml(c.maternal, "anne")}
+      </div></div>`;
+  }
+  const unplacedHtml = unplaced.length
+    ? `<div class="ped-band ped-unplaced">
+        <div class="ped-glabel">🔍 Kümeye bağlanmayan (${unplaced.length}) <span class="muted">— muhtemel anne/farklı kol; birini "Anne" işaretlersen küme açılır</span></div>
+        <div class="ped-col unk">${unplaced.sort((a, b) => b.cm - a.cm).map(chip).join("") || "—"}</div></div>`
+    : "";
+
+  view.innerHTML = `
+    <div class="ped-note muted">Her eşleşme, MyHeritage akrabalık tahminine göre <b>tarafına</b> (Baba solda / Anne sağda)
+      ve <b>tahmini ortak-ata nesline</b> yerleştirildi. Nesil kabadır, kesin değildir. Çipe tıkla → detay.</div>
+    <div class="ped">
+      <div class="ped-colhead"><span class="baba">◀ Baba tarafı</span><span class="anne">Anne tarafı ▶</span></div>
+      ${bands}
+      ${unplacedHtml}
+      <div class="ped-selfrow"><span class="ped-self-box">SEN</span></div>
+    </div>`;
 }
 
 function renderGenOverlay(g, view) {
