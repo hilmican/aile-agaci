@@ -212,6 +212,12 @@ label input, label select { color: var(--ink); }
 .dna-table th, .dna-table td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 .dna-table th { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; }
 .dna-mgr { font-size: 0.72rem; color: var(--muted); }
+.dna-link-ind { font-size: 0.72rem; color: #2f5d3f; }
+.dna-link-box { margin: 0.6rem 0; padding: 0.6rem 0.8rem; background: #4a7c590d; border: 1px solid var(--border); border-radius: 10px; }
+.dna-link-box .dna-sec-title { margin: 0 0 0.4rem; }
+.dna-sugg { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.5rem; }
+.dna-sugg-chip { cursor: pointer; }
+.dna-linked { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .dna-pager { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1rem; }
 .dna-row { cursor: pointer; }
 .dna-row:hover { background: #4a7c5910; }

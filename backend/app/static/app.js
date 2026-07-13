@@ -1762,6 +1762,7 @@ async function loadDna() {
       ${d.items.map((m) => `<tr class="dna-row" data-id="${m.id}">
         <td title="${m.has_detail ? "Detay çekildi" : "Detay yok"}">${m.has_detail ? "📄" : ""}</td>
         <td><span class="sex-dot ${esc(m.gender)}"></span> ${esc(m.name)}
+          ${m.linked ? `<div class="dna-link-ind">🔗 ${esc(m.linked.name)}</div>` : ""}
           ${m.manager ? `<div class="dna-mgr">yön: ${esc(m.manager)}</div>` : ""}</td>
         <td>${esc(m.relationship)}</td>
         <td><b>${esc(m.shared_cm)}</b> cM${m.match_quality_pct ? ` <span class="muted">(${esc(m.match_quality_pct)}%)</span>` : ""}</td>
@@ -1837,12 +1838,66 @@ async function openDnaDetail(id) {
     <div class="modal-head"><h2>🧬 ${esc(m.name)}</h2><button class="ghost" data-dd-close>✕</button></div>
     <div class="modal-body">
       <div class="detail-grid">${summary}</div>
+      <div class="dna-link-box"><h3 class="dna-sec-title">Ağaçtaki yeri</h3>
+        <div id="dna-link-body"></div></div>
       <h3 class="dna-sec-title">Detaylar ${m.detail_at ? `<span class="muted">(${esc(fmtAgo(m.detail_at))})</span>` : ""}</h3>
       ${sections}
     </div>
   </div>`;
   ov.querySelector("[data-dd-close]").addEventListener("click", () => ov.classList.add("hidden"));
+  renderDnaLink(m);
   ov.classList.remove("hidden");
+}
+
+async function relinkDna(matchId, individualId) {
+  await api(`/api/dna/${matchId}/link`, { method: "POST", json: { individual_id: individualId } });
+  toast(individualId ? "Ağaca bağlandı" : "Bağlantı kaldırıldı");
+  openDnaDetail(matchId);
+  loadDna();
+}
+
+async function renderDnaLink(m) {
+  const box = $("#dna-link-body");
+  if (!box) return;
+  if (m.linked) {
+    box.innerHTML = `<div class="dna-linked">
+      <span class="chip" data-goto-person="${m.linked.id}">🔗 ${esc(m.linked.name)}
+        ${m.linked.birth_date ? `<span class="muted">(${esc(trDate(m.linked.birth_date))})</span>` : ""}</span>
+      ${canEdit() ? `<button class="small ghost" id="dna-unlink">Bağlantıyı kaldır</button>` : ""}
+    </div>`;
+    box.querySelector("[data-goto-person]").addEventListener("click", () => {
+      $("#dna-detail").classList.add("hidden");
+      switchTab("people"); selectPerson(m.linked.id);
+    });
+    if (canEdit()) $("#dna-unlink").addEventListener("click", () => relinkDna(m.id, null));
+    return;
+  }
+  if (!canEdit()) { box.innerHTML = '<span class="muted">Bağlı değil.</span>'; return; }
+  box.innerHTML = '<div id="dna-sugg" class="dna-sugg muted">Öneriler yükleniyor…</div><div id="dna-picker"></div>';
+  // Otomatik öneriler
+  try {
+    const s = await api(`/api/dna/${m.id}/suggestions`);
+    $("#dna-sugg").className = "dna-sugg";
+    $("#dna-sugg").innerHTML = s.items.length
+      ? `<span class="muted">Öneri:</span> ` + s.items.map((p) =>
+          `<button class="chip dna-sugg-chip" data-id="${p.id}">${esc(p.name)}
+            ${p.birth_date ? `<span class="muted">${esc(trDate(p.birth_date))}</span>` : ""}</button>`).join("")
+      : '<span class="muted">İsim eşleşen kişi bulunamadı.</span>';
+    $$("#dna-sugg .dna-sugg-chip").forEach((b) =>
+      b.addEventListener("click", () => relinkDna(m.id, Number(b.dataset.id))));
+  } catch (_) { $("#dna-sugg").textContent = ""; }
+  // Manuel arama
+  const picker = createPersonPicker({ placeholder: "Ağaçta kişi ara ve bağla…" });
+  const btn = document.createElement("button");
+  btn.className = "small"; btn.textContent = "Bağla";
+  btn.addEventListener("click", () => {
+    const id = picker.getId();
+    if (!id) return toast("Önce kişi seçin", true);
+    relinkDna(m.id, id);
+  });
+  const wrap = $("#dna-picker");
+  wrap.className = "inline-form";
+  wrap.append(picker.el, btn);
 }
 
 /* ---- Toplu işlemler ---- */
