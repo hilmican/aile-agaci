@@ -58,24 +58,35 @@ def import_matches(
         if not name:
             continue
         cm = (mm.get("shared_cm") or "").strip()
-        row = db.scalar(select(DnaMatch).where(
-            DnaMatch.kit == kit, DnaMatch.name == name, DnaMatch.shared_cm == cm))
+        guid = (mm.get("match_guid") or "").strip()
+        # Tekilleştirme: guid varsa onunla (kararlı), yoksa (kit,ad,cm).
+        row = None
+        if guid:
+            row = db.scalar(select(DnaMatch).where(DnaMatch.match_guid == guid))
+        if row is None:
+            row = db.scalar(select(DnaMatch).where(
+                DnaMatch.kit == kit, DnaMatch.name == name, DnaMatch.shared_cm == cm))
         new = row is None
         if new:
             row = DnaMatch(kit=kit, name=name, shared_cm=cm)
             db.add(row)
+        row.name = name or row.name
+        row.shared_cm = cm or row.shared_cm
         row.manager = mm.get("manager", "")
         row.relationship = mm.get("relationship", "")
         row.match_quality_pct = mm.get("match_quality_pct", "")
-        row.shared_cm_val = _parse_tr_num(cm)
+        scv = mm.get("shared_cm_val")
+        row.shared_cm_val = float(scv) if isinstance(scv, (int, float)) else _parse_tr_num(cm)
         row.shared_segments = mm.get("shared_segments", "")
         row.largest_segment_cm = mm.get("largest_segment_cm", "")
         row.age = mm.get("age", "")
         row.country = mm.get("country", "")
         row.smart_matches = mm.get("smart_matches", "")
         row.tree_size = mm.get("tree_size", "")
+        g = (mm.get("gender") or "").upper()
         gc = mm.get("gender_class", "") or ""
-        row.gender = "F" if "gender_F" in gc else ("M" if "gender_M" in gc else "U")
+        row.gender = (g if g in ("F", "M")
+                      else "F" if "gender_F" in gc else "M" if "gender_M" in gc else "U")
         if mm.get("detail_href"):
             row.detail_url = mm["detail_href"]
         if mm.get("match_guid"):
