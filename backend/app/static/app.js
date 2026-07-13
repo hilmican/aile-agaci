@@ -1877,12 +1877,29 @@ async function renderDnaAnalysis(m) {
     : `Bu kişi ${a.side_tr.toLowerCase()}ndan geliyor. ${names.length
         ? `Olası ortak ata: <b>${esc(names.join(" & "))}</b> — ${esc(m.name)} muhtemelen onların soyundan.`
         : `Ortak ata ~${a.mrca_generation || "?"}. nesilde.`}`;
+  // Bağımsız pedigree kesişimi
+  let indep = "";
+  if (a.tree_overlap_count) {
+    const chips = a.tree_overlap.map((x) =>
+      `<span class="chip an-mrca" data-goto-person="${x.individual_id}">${esc(x.name)}</span>`).join("");
+    const selfNote = a.self_in_tree
+      ? `<div class="an-self">✔ Bu eşleşme ağacımızda zaten var: <b>${esc(a.self_in_tree.name)}</b></div>` : "";
+    indep = `<div class="an-indep">
+      <div class="an-label">🌳 Bizim ağaç kesişimi (bağımsız): eşleşmenin ağacındaki ${a.pedigree_names} kişiden
+        <b>${a.tree_overlap_count}</b>'i bizim ağaçta</div>
+      ${selfNote}
+      <div class="rel-chips">${chips}</div></div>`;
+  } else {
+    indep = `<div class="an-indep muted">🌳 Bizim ağaç kesişimi: eşleşmenin ağacında (${a.pedigree_names || 0} kişi)
+      bizim ağaçla örtüşen kişi yok — bağımsız yerleştirilemez.</div>`;
+  }
   box.innerHTML = `
     <div class="an-row"><span class="side-badge ${sideCls}">${esc(a.side_tr)}</span>
       <span class="muted">Güven: ${esc(a.confidence)}${a.has_theory ? " · ToFR ✓" : ""} · tahmini ~${a.mrca_generation || "?"}. nesil</span></div>
-    <div class="an-label">Olası ortak ata (MRCA):</div>
+    <div class="an-label">MyHeritage'a göre olası ortak ata (MRCA):</div>
     <div class="rel-chips">${mrcaHtml}</div>
-    <div class="an-place">${place}</div>`;
+    <div class="an-place">${place}</div>
+    ${indep}`;
   $$("#dna-analysis [data-goto-person]").forEach((c) =>
     c.addEventListener("click", () => gotoPersonFromDna(Number(c.dataset.gotoPerson))));
 }

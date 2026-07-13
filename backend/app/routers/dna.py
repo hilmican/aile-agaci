@@ -223,6 +223,37 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
         near.sort(key=lambda a: abs((a["gen"] or 9) - gen))
         mrca = near[:2]
 
+    # Bağımsız katman: eşleşmenin çektiğimiz soyağacını bizim ağaçla kesiştir.
+    def _find_names(o, out, d=0):
+        if d > 9 or o is None:
+            return
+        if isinstance(o, dict):
+            nm = o.get("name")
+            if isinstance(nm, str):
+                out.append(nm)
+            for v in o.values():
+                _find_names(v, out, d + 1)
+        elif isinstance(o, list):
+            for v in o:
+                _find_names(v, out, d + 1)
+
+    ped = eps.get("dna_single_match_get_other_kit_pedigree_chart")
+    pnames = []
+    _find_names(ped.get("data") if isinstance(ped, dict) else ped, pnames)
+    overlap = []
+    seen_ids = set()
+    self_link = None
+    for nm in pnames:
+        if not nm or nm == "Bilinmiyor":
+            continue
+        tp = tree.get(_norm(re.sub(r"\(.*?\)", "", nm)))
+        if tp and tp.id not in seen_ids:
+            seen_ids.add(tp.id)
+            entry = {"name": f"{tp.first_name} {tp.last_name}".strip(), "individual_id": tp.id}
+            overlap.append(entry)
+            if _norm(nm) == _norm(row.name) and self_link is None:
+                self_link = entry
+
     cm = row.shared_cm_val or 0
     conf = ("çok yüksek" if cm >= 1300 else "yüksek" if cm >= 500
             else "orta" if cm >= 200 else "düşük")
@@ -235,6 +266,11 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
         "confidence": conf, "has_theory": bool(tofr),
         "mrca": mrca,
         "shared_ancestors": ancestors,
+        # Bağımsız pedigree kesişimi (MyHeritage'dan bağımsız, bizim eşleştirmemiz)
+        "tree_overlap": overlap,
+        "tree_overlap_count": len(overlap),
+        "pedigree_names": len([n for n in pnames if n and n != "Bilinmiyor"]),
+        "self_in_tree": self_link,
     }
 
 
