@@ -1912,21 +1912,33 @@ async function renderDnaAnalysis(m) {
     : `Bu kişi ${a.side_tr.toLowerCase()}ndan geliyor. ${names.length
         ? `Olası ortak ata: <b>${esc(names.join(" & "))}</b> — ${esc(m.name)} muhtemelen onların soyundan.`
         : `Ortak ata ~${a.mrca_generation || "?"}. nesilde.`}`;
-  // Bağımsız pedigree kesişimi
-  let indep = "";
+  // Bağımsız YAPISAL ağaç kesişimi + eşleşmenin yakın ağacı
+  const mt = a.match_tree;
+  const gnode = (m) => m.matched
+    ? `<span class="mt-node matched" data-goto-person="${m.matched}" title="bizim ağaçta göster">${esc(m.name)}<span class="mt-rel">${esc(m.relation)} ✓</span></span>`
+    : `<span class="mt-node">${esc(m.name)}<span class="mt-rel">${esc(m.relation)}</span></span>`;
+  let treeGraph = "";
+  if (mt) {
+    const par = mt.members.filter((m) => m.relation === "ebeveyn");
+    const rest = mt.members.filter((m) => m.relation !== "ebeveyn");
+    treeGraph = `<div class="mt-graph">
+      ${par.length ? `<div class="mt-row">${par.map(gnode).join("")}</div><div class="mt-conn">│</div>` : ""}
+      <div class="mt-row">${gnode(mt.root)}</div>
+      ${rest.length ? `<div class="mt-conn">│</div><div class="mt-row">${rest.map(gnode).join("")}</div>` : ""}
+    </div>`;
+  }
+  const extLink = (a.tree_url || a.myheritage_url)
+    ? `<a href="${esc(a.tree_url || a.myheritage_url)}" target="_blank" class="mt-ext">MyHeritage'da aç ↗</a>` : "";
+  let indep;
   if (a.tree_overlap_count) {
-    const chips = a.tree_overlap.map((x) =>
-      `<span class="chip an-mrca" data-goto-person="${x.individual_id}">${esc(x.name)}</span>`).join("");
-    const selfNote = a.self_in_tree
-      ? `<div class="an-self">✔ Bu eşleşme ağacımızda zaten var: <b>${esc(a.self_in_tree.name)}</b></div>` : "";
     indep = `<div class="an-indep">
-      <div class="an-label">🌳 Bizim ağaç kesişimi (bağımsız): eşleşmenin ağacındaki ${a.pedigree_names} kişiden
-        <b>${a.tree_overlap_count}</b>'i bizim ağaçta</div>
-      ${selfNote}
-      <div class="rel-chips">${chips}</div></div>`;
+      <div class="an-label">🌳 Bizim ağaçla <b>yapısal</b> kesişim: <b>${a.tree_overlap_count}</b> kişi — ebeveyn ilişkisi de eşleşiyor. ${extLink}</div>
+      ${treeGraph}
+      <div class="muted sml">✓ işaretli düğüm bizim ağaçta var; tıkla, ağaçta o kişiye git.</div></div>`;
   } else {
-    indep = `<div class="an-indep muted">🌳 Bizim ağaç kesişimi: eşleşmenin ağacında (${a.pedigree_names || 0} kişi)
-      bizim ağaçla örtüşen kişi yok — bağımsız yerleştirilemez.</div>`;
+    indep = `<div class="an-indep">
+      <div class="an-label muted">🌳 Bizim ağaçla yapısal kesişim yok — ortak ata bu eşleşmenin yakın ağacında görünmüyor (yalnız ad benzerliği güvenilmez sayılmaz). ${extLink}</div>
+      ${treeGraph}</div>`;
   }
   const inferNote = inferred
     ? `<div class="an-infer">🧩 Taraf, ortak eşleşme kümelemesiyle çıkarıldı:

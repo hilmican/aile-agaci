@@ -167,6 +167,146 @@ def _shared_names(eps: dict) -> list[str]:
     return out
 
 
+def _tree_index(db: Session):
+    """Ağaç dizini: norm(tam ad) -> [Individual], id -> Individual, child_id -> {parent_id}.
+    Kızlık soyadıyla da indexlenir (evlilikte soyadı değişimi)."""
+    from collections import defaultdict
+    byname = defaultdict(list)
+    id2ind = {}
+    for p in db.scalars(select(Individual)).all():
+        id2ind[p.id] = p
+        keys = {_norm(f"{p.first_name} {p.last_name}")}
+        if p.maiden_name:
+            keys.add(_norm(f"{p.first_name} {p.maiden_name}"))
+        for k in keys:
+            if k:
+                byname[k].append(p)
+    parents_ids = defaultdict(set)
+    for r in db.scalars(select(ParentChild)).all():
+        parents_ids[r.child_id].add(r.parent_id)
+    return byname, parents_ids, id2ind
+
+
+def _tree_parent_names(tid: int, parents_ids, id2ind) -> set:
+    out = set()
+    for pid in parents_ids.get(tid, ()):
+        p = id2ind.get(pid)
+        if p:
+            out.add(_norm(f"{p.first_name} {p.last_name}"))
+            if p.maiden_name:
+                out.add(_norm(f"{p.first_name} {p.maiden_name}"))
+    return out
+
+
+def _pedigree_individuals(eps: dict):
+    """Eşleşmenin pedigree'sinden kök birey + {id:birey} + {aile:(koca,karı)}."""
+    ai = _dig(eps, "dna_single_match_get_other_kit_pedigree_chart",
+              "data", "dna_match", "other_dna_kit", "associated_individual")
+    inds, fams = {}, {}
+
+    def add(ind):
+        if isinstance(ind, dict) and ind.get("id"):
+            inds[ind["id"]] = ind
+            for sf in ind.get("spouse_in_families") or []:
+                fams[sf.get("id")] = ((sf.get("husband") or {}).get("id"),
+                                      (sf.get("wife") or {}).get("id"))
+    if ai:
+        add(ai)
+        for cf in _dig(ai, "close_family", "data") or []:
+            add(cf.get("individual"))
+    return ai, inds, fams
+
+
+def _ped_parents(ind: dict, inds: dict, fams: dict) -> list:
+    out = []
+    if isinstance(ind, dict):
+        for cf in ind.get("child_in_families") or []:
+            fid = (cf.get("family") or {}).get("id") or cf.get("id")
+            h, w = fams.get(fid, (None, None))
+            for pid in (h, w):
+                if pid and pid in inds:
+                    out.append(inds[pid])
+    return out
+
+
+def _tree_overlap(eps: dict, byname, parents_ids, id2ind) -> list:
+    """YAPISAL ağaç kesişimi: pedigree bireyi bizim ağaçtaki biriyle eşleşiyor VE
+    ebeveyn(ler)i de o kişinin ebeveynleriyle eşleşiyorsa 'güçlü'. Yalnız ad benzerliği
+    (yaygın Türk adları) korroborasyon yoksa ELENİR — false-positive engellenir."""
+    ai, inds, fams = _pedigree_individuals(eps)
+    out, seen = [], set()
+    for ind in inds.values():
+        key = _norm(ind.get("name") or "")
+        if not key or key == "bilinmiyor":
+            continue
+        cands = byname.get(key)
+        if not cands:
+            continue
+        ped_par = {_norm(p.get("name") or "") for p in _ped_parents(ind, inds, fams)}
+        has_last = bool((ind.get("last_name") or "").strip())
+        for T in cands:
+            if T.id in seen:
+                continue
+            matched = ped_par & _tree_parent_names(T.id, parents_ids, id2ind)
+            if not matched and not has_last:
+                continue  # yalnız ad, ebeveyn korroborasyonu yok -> ele
+            seen.add(T.id)
+            mp = []
+            for pid in parents_ids.get(T.id, ()):
+                p = id2ind.get(pid)
+                if p and (_norm(f"{p.first_name} {p.last_name}") in matched
+                          or (p.maiden_name and _norm(f"{p.first_name} {p.maiden_name}") in matched)):
+                    mp.append({"name": f"{p.first_name} {p.last_name}".strip(), "individual_id": p.id})
+            out.append({
+                "name": f"{T.first_name} {T.last_name}".strip(),
+                "individual_id": T.id, "ped_name": ind.get("name"),
+                "score": len(matched), "strong": bool(matched),
+                "is_root": bool(ai) and ind.get("id") == ai.get("id"),
+                "matched_parents": mp,
+            })
+    out.sort(key=lambda x: (-x["score"], not x["is_root"]))
+    return out
+
+
+def _match_tree(eps: dict, byname, parents_ids, id2ind) -> dict | None:
+    """Eşleşmenin yakın ailesini (kök + ebeveyn/eş/çocuk) ilişki etiketiyle döndürür;
+    bizim ağaçla eşleşen bireyleri (yapısal) individual_id ile işaretler. Görselleştirme için."""
+    ai, inds, fams = _pedigree_individuals(eps)
+    if not ai:
+        return None
+    strong = {o["ped_name"]: o for o in _tree_overlap(eps, byname, parents_ids, id2ind)}
+    root_id = ai.get("id")
+    par_ids = {p.get("id") for p in _ped_parents(ai, inds, fams)}
+    spouse_ids = set()
+    for sf in ai.get("spouse_in_families") or []:
+        for r in ((sf.get("husband") or {}).get("id"), (sf.get("wife") or {}).get("id")):
+            if r and r != root_id:
+                spouse_ids.add(r)
+    child_ids = {i["id"] for i in inds.values()
+                 if any(p.get("id") == root_id for p in _ped_parents(i, inds, fams))}
+
+    def rel(iid):
+        if iid == root_id:
+            return "kök"
+        if iid in par_ids:
+            return "ebeveyn"
+        if iid in spouse_ids:
+            return "eş"
+        if iid in child_ids:
+            return "çocuk"
+        return "aile"
+
+    def entry(ind):
+        o = strong.get(ind.get("name"))
+        return {"name": ind.get("name"), "gender": ind.get("gender"),
+                "relation": rel(ind.get("id")),
+                "matched": o["individual_id"] if (o and o["strong"]) else None}
+    members = [entry(i) for i in inds.values() if i.get("id") != root_id]
+    order = {"ebeveyn": 0, "eş": 1, "çocuk": 2, "aile": 3}
+    members.sort(key=lambda m: order.get(m["relation"], 9))
+    return {"root": entry(ai), "members": members}
+
+
 def _rel_to_gen(rel: str) -> int | None:
     """Akrabalık etiketinden MRCA neslini (sen=0) tahmin et."""
     r = _norm(rel)
@@ -290,10 +430,9 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
 
     gen = _rel_to_gen(row.relationship)
 
-    # Ağaç kişileri (isimle eşleştirmek için)
-    tree = {}
-    for p in db.scalars(select(Individual)).all():
-        tree.setdefault(_norm(f"{p.first_name} {p.last_name}"), p)
+    # Ağaç dizini (yapısal kesişim + ata isim eşleşmesi için)
+    byname, parents_ids, id2ind = _tree_index(db)
+    tree = {k: v[0] for k, v in byname.items()}
 
     # Ortak atalar (isim + pozisyon + ağaç eşleşmesi)
     ancestors = []
@@ -318,36 +457,17 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
         near.sort(key=lambda a: abs((a["gen"] or 9) - gen))
         mrca = near[:2]
 
-    # Bağımsız katman: eşleşmenin çektiğimiz soyağacını bizim ağaçla kesiştir.
-    def _find_names(o, out, d=0):
-        if d > 9 or o is None:
-            return
-        if isinstance(o, dict):
-            nm = o.get("name")
-            if isinstance(nm, str):
-                out.append(nm)
-            for v in o.values():
-                _find_names(v, out, d + 1)
-        elif isinstance(o, list):
-            for v in o:
-                _find_names(v, out, d + 1)
-
-    ped = eps.get("dna_single_match_get_other_kit_pedigree_chart")
-    pnames = []
-    _find_names(ped.get("data") if isinstance(ped, dict) else ped, pnames)
-    overlap = []
-    seen_ids = set()
-    self_link = None
-    for nm in pnames:
-        if not nm or nm == "Bilinmiyor":
-            continue
-        tp = tree.get(_norm(re.sub(r"\(.*?\)", "", nm)))
-        if tp and tp.id not in seen_ids:
-            seen_ids.add(tp.id)
-            entry = {"name": f"{tp.first_name} {tp.last_name}".strip(), "individual_id": tp.id}
-            overlap.append(entry)
-            if _norm(nm) == _norm(row.name) and self_link is None:
-                self_link = entry
+    # Bağımsız YAPISAL katman: eşleşmenin pedigree'sini (birey + ebeveyn ilişkileri)
+    # bizim ağaçla kesiştir. Yalnız ad benzerliği değil, ebeveyn korroborasyonu aranır.
+    overlap = _tree_overlap(eps, byname, parents_ids, id2ind)
+    self_link = next((o for o in overlap if o["is_root"] and o["strong"]), None)
+    match_tree = _match_tree(eps, byname, parents_ids, id2ind)
+    tree_url = ""
+    try:
+        raw = json.loads(row.raw) if row.raw else {}
+        tree_url = _dig(raw, "other_dna_kit", "associated_individual", "link_in_tree") or ""
+    except Exception:
+        pass
 
     # ---- In-common taraf çıkarımı (graf etiket-yayılımı) ----
     # Taraf ToFR'den bilinmiyorsa: ortak-eşleşme grafında hangi tarafın kümesine
@@ -375,11 +495,13 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
         "confidence": conf, "has_theory": bool(tofr),
         "mrca": mrca,
         "shared_ancestors": ancestors,
-        # Bağımsız pedigree kesişimi (MyHeritage'dan bağımsız, bizim eşleştirmemiz)
-        "tree_overlap": overlap,
-        "tree_overlap_count": len(overlap),
-        "pedigree_names": len([n for n in pnames if n and n != "Bilinmiyor"]),
+        # Bağımsız YAPISAL pedigree kesişimi (ebeveyn korroborasyonlu)
+        "tree_overlap": [o for o in overlap if o["strong"]],
+        "tree_overlap_count": sum(1 for o in overlap if o["strong"]),
         "self_in_tree": self_link,
+        "match_tree": match_tree,
+        "myheritage_url": row.detail_url or "",
+        "tree_url": tree_url,
         # In-common taraf çıkarımı (taraf bilinmiyorsa)
         "inferred_side": inferred_side,
         "inferred_side_tr": {"paternal": "Baba tarafı", "maternal": "Anne tarafı"}.get(inferred_side),
@@ -396,23 +518,7 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     from collections import defaultdict
     clusters = _cluster_sides(db)
     rows = [r for r in db.scalars(select(DnaMatch)).all() if r.detail_json]
-
-    tree = {}
-    for p in db.scalars(select(Individual)).all():
-        tree.setdefault(_norm(f"{p.first_name} {p.last_name}"), p)
-
-    def _find_names(o, out, d=0):
-        if d > 9 or o is None:
-            return
-        if isinstance(o, dict):
-            nm = o.get("name")
-            if isinstance(nm, str):
-                out.append(nm)
-            for v in o.values():
-                _find_names(v, out, d + 1)
-        elif isinstance(o, list):
-            for v in o:
-                _find_names(v, out, d + 1)
+    byname, parents_ids, id2ind = _tree_index(db)
 
     nodes = []
     idx = {}
@@ -432,23 +538,9 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
             ind = db.get(Individual, r.individual_id)
             if ind:
                 linked = {"individual_id": ind.id, "name": f"{ind.first_name} {ind.last_name}".strip()}
-        # Pedigree kesişimi: eşleşmenin çektiğimiz soyağacındaki isimler ∩ bizim ağaç
-        ped = eps.get("dna_single_match_get_other_kit_pedigree_chart")
-        pnames = []
-        _find_names(ped.get("data") if isinstance(ped, dict) else ped, pnames)
-        overlap = []
-        for nm in pnames:
-            if not nm or nm == "Bilinmiyor":
-                continue
-            tp = tree.get(_norm(re.sub(r"\(.*?\)", "", nm)))
-            if tp:
-                overlap.append({"individual_id": tp.id,
-                                "name": f"{tp.first_name} {tp.last_name}".strip()})
-        # tekilleştir
-        seen = set(); ov = []
-        for o in overlap:
-            if o["individual_id"] not in seen:
-                seen.add(o["individual_id"]); ov.append(o)
+        # YAPISAL pedigree kesişimi (ebeveyn korroborasyonlu; yaygın-ad false-positive'siz)
+        ov = [{"individual_id": o["individual_id"], "name": o["name"]}
+              for o in _tree_overlap(eps, byname, parents_ids, id2ind) if o["strong"]]
         i = len(nodes)
         idx[nn] = i
         nodes.append({
