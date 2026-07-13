@@ -1879,8 +1879,9 @@ async function renderDnaAnalysis(m) {
   const effSide = a.side !== "unknown" ? a.side : a.inferred_side;
   const inferred = a.side === "unknown" && a.inferred_side;
   const sideCls = effSide === "paternal" ? "side-p" : effSide === "maternal" ? "side-m" : "side-u";
+  const srcSuffix = a.side_src === "manuel" ? " (manuel)" : "";
   const sideLabel = inferred ? `${a.inferred_side_tr} (in-common)`
-    : effSide === "paternal" ? "Baba tarafı" : effSide === "maternal" ? "Anne tarafı" : "Belirsiz";
+    : (effSide === "paternal" ? "Baba tarafı" : effSide === "maternal" ? "Anne tarafı" : "Belirsiz") + srcSuffix;
   const chip = (x) => x.individual_id
     ? `<span class="chip an-mrca" data-goto-person="${x.individual_id}">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`
     : `<span class="chip an-mrca off">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`;
@@ -1918,12 +1919,26 @@ async function renderDnaAnalysis(m) {
     <div class="an-row"><span class="side-badge ${sideCls}">${esc(sideLabel)}</span>
       <span class="muted">Güven: ${esc(a.confidence)}${a.has_theory ? " · ToFR ✓" : ""} · tahmini ~${a.mrca_generation || "?"}. nesil</span></div>
     ${inferNote}
+    <div class="an-sidebtns">Taraf işaretle:
+      <button class="ghost sm ${a.manual_side === "paternal" ? "on" : ""}" data-side="paternal">Baba</button>
+      <button class="ghost sm ${a.manual_side === "maternal" ? "on" : ""}" data-side="maternal">Anne</button>
+      <button class="ghost sm" data-side="" title="işareti temizle">×</button>
+      <span class="muted sml">${a.manual_side ? "elle işaretlendi (tohum)" : "bilinen bir akrabayı işaretlersen küme tohumu olur"}</span>
+    </div>
     <div class="an-label">MyHeritage'a göre olası ortak ata (MRCA):</div>
     <div class="rel-chips">${mrcaHtml}</div>
     <div class="an-place">${place}</div>
     ${indep}`;
   $$("#dna-analysis [data-goto-person]").forEach((c) =>
     c.addEventListener("click", () => gotoPersonFromDna(Number(c.dataset.gotoPerson))));
+  $$("#dna-analysis [data-side]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await api(`/api/dna/${m.id}/side`, { method: "POST", json: { side: b.dataset.side } });
+      toast(b.dataset.side ? "Taraf işaretlendi (tohum)" : "İşaret temizlendi");
+      await renderDnaAnalysis(m);
+      loadDna();
+    } catch (e) { toast(e.message || "Hata"); }
+  }));
 }
 
 async function relinkDna(matchId, individualId) {

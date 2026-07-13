@@ -233,12 +233,12 @@ def _cluster_sides(db: Session) -> dict:
             eps = (json.loads(r.detail_json) or {}).get("endpoints", {})
         except Exception:
             eps = {}
-        s = r.tofr_side
-        if not s:  # self-heal: eski kayıtta ToFR taraf'ını hesapla ve sakla
-            s = _side_from_eps(eps)
-            if s != (r.tofr_side or ""):
-                r.tofr_side = s
+        if not r.tofr_side:  # self-heal: eski kayıtta ToFR taraf'ını hesapla ve sakla
+            t = _side_from_eps(eps)
+            if t:
+                r.tofr_side = t
                 dirty = True
+        s = r.manual_side or r.tofr_side  # elle işaret ToFR'yi ezer (tohum)
         if s:
             seed[nn] = s
         for p in _shared_names(eps):
@@ -284,7 +284,8 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
     # Taraf (ToFR'den)
     tofr = _dig(eps, "dna_single_match_get_theories_of_family_relativity",
                 "data", "dna_match", "theories", "data") or []
-    side = _side_from_eps(eps) or "unknown"
+    side = row.manual_side or _side_from_eps(eps) or "unknown"
+    side_src = ("manuel" if row.manual_side else "ToFR" if _side_from_eps(eps) else None)
     side_short = {"paternal": "P", "maternal": "M"}.get(side)
 
     gen = _rel_to_gen(row.relationship)
@@ -368,7 +369,8 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
     side_tr = {"paternal": "Baba tarafı", "maternal": "Anne tarafı", "unknown": "Belirsiz"}[side]
     return {
         "available": True,
-        "side": side, "side_tr": side_tr,
+        "side": side, "side_tr": side_tr, "side_src": side_src,
+        "manual_side": row.manual_side or None,
         "relationship": row.relationship, "mrca_generation": gen,
         "confidence": conf, "has_theory": bool(tofr),
         "mrca": mrca,
@@ -423,7 +425,7 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         except Exception:
             eps = {}
         cl = clusters.get(nn, {})
-        eff = r.tofr_side or cl.get("side") or "unknown"
+        eff = r.manual_side or r.tofr_side or cl.get("side") or "unknown"
         gen = _rel_to_gen(r.relationship)
         linked = None
         if r.individual_id:
@@ -451,7 +453,7 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         idx[nn] = i
         nodes.append({
             "id": r.id, "name": r.name, "cm": r.shared_cm_val or 0,
-            "side": eff, "seed": bool(r.tofr_side), "gen": gen,
+            "side": eff, "seed": bool(r.manual_side or r.tofr_side), "gen": gen,
             "relationship": r.relationship, "linked": linked, "overlap": ov,
         })
         shared_sets[nn] = set(_norm(x) for x in _shared_names(eps))
@@ -488,6 +490,24 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     return {"nodes": nodes, "edges": [[a, b] for a, b in edges],
             "tree_links": tl, "counts": counts, "total_matches": db.scalar(
                 select(func.count()).select_from(DnaMatch)) or 0}
+
+
+@router.post("/{match_id}/side")
+def set_side(match_id: int, payload: dict = Body(...),
+             db: Session = Depends(get_db), user: User = Depends(require_editor)):
+    """Eşleşmeye elle taraf atar (baba/anne) — kümeleme için tohum olur.
+    Bilinen bir anne-tarafı akrabayı işaretleyince anne kümesi propagasyonla oluşur."""
+    row = db.get(DnaMatch, match_id)
+    if row is None:
+        raise HTTPException(404, "Eşleşme bulunamadı")
+    s = (payload.get("side") or "").strip().lower()
+    if s not in ("paternal", "maternal", ""):
+        raise HTTPException(400, "Geçersiz taraf")
+    row.manual_side = s
+    _CLUSTER_CACHE["key"] = None  # kümeleme yeniden hesaplanmalı
+    log_activity(db, user, "dna_side", None, f"{row.name}: taraf = {s or 'temizlendi'}")
+    db.commit()
+    return {"ok": True, "id": row.id, "manual_side": s or None}
 
 
 @router.post("/{match_id}/link")

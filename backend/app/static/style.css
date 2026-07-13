@@ -398,3 +398,6 @@ label input, label select { color: var(--ink); }
 .gen-mchip { border: 1.5px solid #bbb; border-radius: 14px; padding: 0.15rem 0.55rem; font-size: 0.8rem; cursor: pointer; background: var(--bg); }
 .gen-mchip:hover { background: #4a7c5915; }
 button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
+.an-sidebtns { display: flex; align-items: center; gap: 0.35rem; margin: 0.4rem 0; font-size: 0.82rem; color: var(--muted); flex-wrap: wrap; }
+.an-sidebtns button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.an-sidebtns .sml { font-size: 0.75rem; }
