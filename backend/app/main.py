@@ -10,7 +10,7 @@ from .database import Base, SessionLocal, engine, wait_for_db
 from .gedcom import clean_text
 from .models import Individual, Spouse, User
 from .routers import (
-    auth, bulk, dashboard, families, gedcom_router, individuals, map_router, users,
+    auth, bulk, dashboard, dna, families, gedcom_router, individuals, map_router, users,
 )
 from .security import hash_password
 
@@ -107,6 +107,7 @@ app.include_router(dashboard.router)
 app.include_router(families.router)
 app.include_router(map_router.router)
 app.include_router(bulk.router)
+app.include_router(dna.router)
 
 
 @app.get("/api/health")

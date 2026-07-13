@@ -33,6 +33,7 @@
         <button class="tab" data-tab="families">Aileler</button>
         <button class="tab" data-tab="map">Harita</button>
         <button class="tab editor-only hidden" data-tab="bulk">Toplu</button>
+        <button class="tab" data-tab="dna">DNA</button>
         <button class="tab" data-tab="import">İçe Aktar</button>
         <button class="tab admin-only hidden" data-tab="users">Kullanıcılar</button>
       </nav>
@@ -60,6 +61,22 @@
             <h2>🧩 Neler Tamamlanmalı?</h2>
             <div id="dash-health"></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DNA eşleşmeleri -->
+    <section id="tab-dna" class="tab-panel hidden">
+      <div class="list-page">
+        <div class="list-page-head">
+          <h1>DNA Eşleşmeleri</h1>
+          <span id="dna-count" class="muted"></span>
+        </div>
+        <div id="dna-list"></div>
+        <div class="dna-pager">
+          <button id="dna-prev" class="ghost">← Önceki</button>
+          <span id="dna-page-info" class="muted"></span>
+          <button id="dna-next" class="ghost">Sonraki →</button>
         </div>
       </div>
     </section>

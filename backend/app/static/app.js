@@ -155,6 +155,7 @@ $$(".tab").forEach((btn) => {
     if (tab === "families") openFamilies();
     if (tab === "map") openMap();
     if (tab === "bulk") openBulk();
+    if (tab === "dna") openDna();
   });
 });
 
@@ -202,6 +203,7 @@ async function applyHash() {
   }
   if (tab === "map") { await openMap(); return true; }
   if (tab === "bulk") { await openBulk(); return true; }
+  if (tab === "dna") { await openDna(); return true; }
   if (["home", "people", "tree", "import", "users"].includes(tab)) {
     switchTab(tab);
     if (tab === "tree") populateTreeRoots();
@@ -1683,6 +1685,7 @@ async function loadDashboard() {
     family_removed: (f) => `${esc(f.user)}, <b>${nameOrLink(f)}</b> kişisini <b>${esc(f.detail)}</b> kolundan çıkardı`,
     gedcom_imported: (f) => `${esc(f.user)} GEDCOM içe aktardı${f.detail ? ` (${esc(f.detail)})` : ""}`,
     bulk_updated: (f) => `${esc(f.user)} toplu güncelleme yaptı${f.detail ? `: ${esc(f.detail)}` : ""}`,
+    dna_imported: (f) => `${esc(f.user)} DNA eşleşmesi çekti${f.detail ? ` (${esc(f.detail)})` : ""}`,
   };
   function nameOrLink(f) {
     return f.individual_id
@@ -1725,6 +1728,56 @@ $("#tab-home").addEventListener("click", (e) => {
   switchTab("people");
   selectPerson(Number(el.dataset.person));
 });
+
+/* ---- DNA eşleşmeleri ---- */
+const dnaState = { offset: 0, limit: 25, total: 0 };
+
+async function openDna() {
+  switchTab("dna");
+  updateHash({ tab: "dna" });
+  if (!$("#dna-prev").dataset.wired) {
+    $("#dna-prev").dataset.wired = "1";
+    $("#dna-prev").addEventListener("click", () => {
+      dnaState.offset = Math.max(0, dnaState.offset - dnaState.limit); loadDna();
+    });
+    $("#dna-next").addEventListener("click", () => {
+      if (dnaState.offset + dnaState.limit < dnaState.total) {
+        dnaState.offset += dnaState.limit; loadDna();
+      }
+    });
+  }
+  loadDna();
+}
+
+async function loadDna() {
+  const d = await api(`/api/dna?offset=${dnaState.offset}&limit=${dnaState.limit}`);
+  dnaState.total = d.total;
+  $("#dna-count").textContent = `${d.total} eşleşme`;
+  if (!d.items.length) {
+    $("#dna-list").innerHTML = '<p class="muted">Henüz DNA eşleşmesi çekilmedi.</p>';
+  } else {
+    $("#dna-list").innerHTML = `<table class="dna-table">
+      <tr><th>İsim</th><th>Akrabalık</th><th>Paylaşılan DNA</th><th>Bölüm</th>
+        <th>En büyük</th><th>Ülke</th><th>Ağaç</th><th>Smart</th></tr>
+      ${d.items.map((m) => `<tr>
+        <td><span class="sex-dot ${esc(m.gender)}"></span> ${esc(m.name)}
+          ${m.manager ? `<div class="dna-mgr">yön: ${esc(m.manager)}</div>` : ""}</td>
+        <td>${esc(m.relationship)}</td>
+        <td><b>${esc(m.shared_cm)}</b> cM${m.match_quality_pct ? ` <span class="muted">(${esc(m.match_quality_pct)}%)</span>` : ""}</td>
+        <td>${esc(m.shared_segments)}</td>
+        <td>${esc(m.largest_segment_cm)} cM</td>
+        <td>${esc(m.country)}</td>
+        <td>${esc(m.tree_size)}</td>
+        <td>${esc(m.smart_matches)}</td>
+      </tr>`).join("")}
+    </table>`;
+  }
+  const from = d.total ? dnaState.offset + 1 : 0;
+  const to = Math.min(dnaState.offset + dnaState.limit, d.total);
+  $("#dna-page-info").textContent = `${from}–${to} / ${d.total}`;
+  $("#dna-prev").disabled = dnaState.offset === 0;
+  $("#dna-next").disabled = to >= d.total;
+}
 
 /* ---- Toplu işlemler ---- */
 let bulkData = null, bulkPick = null;

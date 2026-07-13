@@ -207,6 +207,13 @@ label input, label select { color: var(--ink); }
 
 .est-note { font-size: 0.78rem; color: #b5651d; background: #b5651d12; padding: 0.3rem 0.5rem; border-radius: 6px; }
 
+/* DNA eşleşmeleri */
+.dna-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.dna-table th, .dna-table td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.dna-table th { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; }
+.dna-mgr { font-size: 0.72rem; color: var(--muted); }
+.dna-pager { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1rem; }
+
 /* Toplu işlemler */
 .bulk-page h1 { font-size: 1.3rem; margin-bottom: 0.8rem; }
 .bulk-filters, .bulk-actionbar { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.8rem; }

@@ -168,6 +168,34 @@ class ActivityLog(Base):
     )
 
 
+class DnaMatch(Base):
+    """MyHeritage'dan çekilen DNA eşleşmesi. Ham veri raw'da; sonraki kayıt
+    eşleştirme testleri için hiçbir alan kaybolmasın."""
+    __tablename__ = "dna_matches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kit: Mapped[str] = mapped_column(String(80), default="", index=True)
+    name: Mapped[str] = mapped_column(String(255), default="", index=True)
+    manager: Mapped[str] = mapped_column(String(255), default="")
+    relationship: Mapped[str] = mapped_column(String(255), default="")
+    match_quality_pct: Mapped[str] = mapped_column(String(40), default="")
+    shared_cm: Mapped[str] = mapped_column(String(40), default="")
+    shared_cm_val: Mapped[float | None] = mapped_column(nullable=True, index=True)
+    shared_segments: Mapped[str] = mapped_column(String(40), default="")
+    largest_segment_cm: Mapped[str] = mapped_column(String(40), default="")
+    age: Mapped[str] = mapped_column(String(80), default="")
+    country: Mapped[str] = mapped_column(String(120), default="")
+    smart_matches: Mapped[str] = mapped_column(String(40), default="")
+    tree_size: Mapped[str] = mapped_column(String(40), default="")
+    gender: Mapped[str] = mapped_column(String(1), default="U")
+    raw: Mapped[str] = mapped_column(Text, default="")
+    # Sonradan sistemdeki bir kişiye bağlamak için (eşleştirme testleri)
+    individual_id: Mapped[int | None] = mapped_column(
+        ForeignKey("individuals.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Media(Base):
     __tablename__ = "media"
 
