@@ -1838,6 +1838,8 @@ async function openDnaDetail(id) {
     <div class="modal-head"><h2>🧬 ${esc(m.name)}</h2><button class="ghost" data-dd-close>✕</button></div>
     <div class="modal-body">
       <div class="detail-grid">${summary}</div>
+      <div class="dna-analysis-box"><h3 class="dna-sec-title">🔎 Analiz</h3>
+        <div id="dna-analysis" class="muted">Yükleniyor…</div></div>
       <div class="dna-link-box"><h3 class="dna-sec-title">Ağaçtaki yeri</h3>
         <div id="dna-link-body"></div></div>
       <h3 class="dna-sec-title">Detaylar ${m.detail_at ? `<span class="muted">(${esc(fmtAgo(m.detail_at))})</span>` : ""}</h3>
@@ -1845,8 +1847,44 @@ async function openDnaDetail(id) {
     </div>
   </div>`;
   ov.querySelector("[data-dd-close]").addEventListener("click", () => ov.classList.add("hidden"));
+  renderDnaAnalysis(m);
   renderDnaLink(m);
   ov.classList.remove("hidden");
+}
+
+function gotoPersonFromDna(pid) {
+  $("#dna-detail").classList.add("hidden");
+  switchTab("people"); selectPerson(pid);
+}
+
+async function renderDnaAnalysis(m) {
+  const box = $("#dna-analysis");
+  if (!box) return;
+  let a;
+  try { a = await api(`/api/dna/${m.id}/analysis`); }
+  catch (_) { box.textContent = "Analiz yüklenemedi."; return; }
+  if (!a.available) { box.innerHTML = '<span class="muted">Analiz için detay çekilmeli.</span>'; return; }
+  box.className = "";
+  const sideCls = a.side === "paternal" ? "side-p" : a.side === "maternal" ? "side-m" : "side-u";
+  const chip = (x) => x.individual_id
+    ? `<span class="chip an-mrca" data-goto-person="${x.individual_id}">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`
+    : `<span class="chip an-mrca off">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`;
+  const mrcaHtml = a.mrca.length ? a.mrca.map(chip).join("")
+    : '<span class="muted">Ağaçta doğrudan ortak ata bulunamadı.</span>';
+  const names = a.mrca.filter((x) => x.individual_id).map((x) => x.name.replace(/\(.*?\)/g, "").trim());
+  const place = a.side === "unknown"
+    ? `Taraf belirlenemedi; ~${a.mrca_generation || "?"}. nesil ata bölgesi.`
+    : `Bu kişi ${a.side_tr.toLowerCase()}ndan geliyor. ${names.length
+        ? `Olası ortak ata: <b>${esc(names.join(" & "))}</b> — ${esc(m.name)} muhtemelen onların soyundan.`
+        : `Ortak ata ~${a.mrca_generation || "?"}. nesilde.`}`;
+  box.innerHTML = `
+    <div class="an-row"><span class="side-badge ${sideCls}">${esc(a.side_tr)}</span>
+      <span class="muted">Güven: ${esc(a.confidence)}${a.has_theory ? " · ToFR ✓" : ""} · tahmini ~${a.mrca_generation || "?"}. nesil</span></div>
+    <div class="an-label">Olası ortak ata (MRCA):</div>
+    <div class="rel-chips">${mrcaHtml}</div>
+    <div class="an-place">${place}</div>`;
+  $$("#dna-analysis [data-goto-person]").forEach((c) =>
+    c.addEventListener("click", () => gotoPersonFromDna(Number(c.dataset.gotoPerson))));
 }
 
 async function relinkDna(matchId, individualId) {

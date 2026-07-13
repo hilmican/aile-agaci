@@ -118,6 +118,126 @@ def save_detail(
     return {"ok": True, "id": row.id, "name": row.name}
 
 
+def _dig(o, *path):
+    for k in path:
+        if isinstance(o, dict):
+            o = o.get(k)
+        elif isinstance(o, list) and isinstance(k, int) and len(o) > k:
+            o = o[k]
+        else:
+            return None
+        if o is None:
+            return None
+    return o
+
+
+def _rel_to_gen(rel: str) -> int | None:
+    """Akrabalık etiketinden MRCA neslini (sen=0) tahmin et."""
+    r = _norm(rel)
+    base = None
+    if any(k in r for k in ("hala", "teyze", "amca", "dayi")):
+        base = 2
+    else:
+        m = re.search(r"(\d+)\.?\s*derece", r)
+        if m:
+            base = int(m.group(1)) + 1
+    if "ebeveyl" in r and base:  # "ebeveylerin ... kuzeni" bir nesil yukarı
+        base += 1
+    return base
+
+
+def _classify_ancestor(term: str) -> tuple[str | None, int | None]:
+    """Türkçe ata terimini (taraf, nesil)'e çevir. P=baba, M=anne tarafı."""
+    t = _norm(term)
+    words = t.split()
+    # Bileşik zincir ("X'in Y'si") = dolaylı ata, MRCA adayı değil.
+    if len(words) > 1 and any(w.endswith(("nin", "nun", "sin", "sinin", "sining")) for w in words):
+        return (None, None)
+    if "buyuk buyuk" in t:
+        return (None, 4)
+    if "buyuk dede" in t or "buyuk baba" in t or ("buyuk" in t and "anne" in t):
+        return (None, 3)
+    if "babaanne" in t:
+        return ("P", 2)
+    if "anneanne" in t:
+        return ("M", 2)
+    if "buyukbaba" in t:
+        return ("P", 2)
+    if t.startswith("dede"):
+        return ("M", 2)
+    if t.startswith("baba"):
+        return ("P", 1)
+    if t.startswith("anne"):
+        return ("M", 1)
+    return (None, None)
+
+
+@router.get("/{match_id}/analysis")
+def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Eşleşme için: taraf (baba/anne), olası ortak ata (MRCA, ağaca bağlı),
+    olası ağaç yeri ve güven. Detay JSON'undan türetilir."""
+    row = db.get(DnaMatch, match_id)
+    if row is None or not row.detail_json:
+        return {"available": False}
+    eps = (json.loads(row.detail_json) or {}).get("endpoints", {})
+
+    # Taraf (ToFR'den)
+    tofr = _dig(eps, "dna_single_match_get_theories_of_family_relativity",
+                "data", "dna_match", "theories", "data") or []
+    side = "unknown"
+    for th in tofr:
+        s = _norm(_dig(th, "relationship", "description_with_side") or "")
+        if "baban" in s:
+            side = "paternal"; break
+        if "annen" in s or "anneniz" in s:
+            side = "maternal"; break
+    side_short = {"paternal": "P", "maternal": "M"}.get(side)
+
+    gen = _rel_to_gen(row.relationship)
+
+    # Ağaç kişileri (isimle eşleştirmek için)
+    tree = {}
+    for p in db.scalars(select(Individual)).all():
+        tree.setdefault(_norm(f"{p.first_name} {p.last_name}"), p)
+
+    # Ortak atalar (isim + pozisyon + ağaç eşleşmesi)
+    ancestors = []
+    for grp in _dig(eps, "dna_single_match_get_shared_surnames",
+                    "data", "dna_match", "surname_matches", "data") or []:
+        for a in _dig(grp, "individual_ancestors", "data") or []:
+            nm = _dig(a, "individual", "name") or ""
+            pos = a.get("relationship_description", "")
+            a_side, a_gen = _classify_ancestor(pos)
+            tp = tree.get(_norm(re.sub(r"\(.*?\)", "", nm)))
+            ancestors.append({
+                "name": nm, "position": pos, "side": a_side, "gen": a_gen,
+                "individual_id": tp.id if tp else None,
+            })
+
+    # MRCA adayları: tarafa + nesle uyanlar (yoksa tarafa uyan en yakınlar)
+    def side_ok(s):
+        return s is None or side_short is None or s == side_short
+    mrca = [a for a in ancestors if a["gen"] == gen and side_ok(a["side"])]
+    if not mrca and gen:
+        near = [a for a in ancestors if a["gen"] and side_ok(a["side"])]
+        near.sort(key=lambda a: abs((a["gen"] or 9) - gen))
+        mrca = near[:2]
+
+    cm = row.shared_cm_val or 0
+    conf = ("çok yüksek" if cm >= 1300 else "yüksek" if cm >= 500
+            else "orta" if cm >= 200 else "düşük")
+
+    side_tr = {"paternal": "Baba tarafı", "maternal": "Anne tarafı", "unknown": "Belirsiz"}[side]
+    return {
+        "available": True,
+        "side": side, "side_tr": side_tr,
+        "relationship": row.relationship, "mrca_generation": gen,
+        "confidence": conf, "has_theory": bool(tofr),
+        "mrca": mrca,
+        "shared_ancestors": ancestors,
+    }
+
+
 @router.post("/{match_id}/link")
 def link_match(
     match_id: int,

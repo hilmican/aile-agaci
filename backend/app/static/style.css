@@ -218,6 +218,16 @@ label input, label select { color: var(--ink); }
 .dna-sugg { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.5rem; }
 .dna-sugg-chip { cursor: pointer; }
 .dna-linked { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.dna-analysis-box { margin: 0.6rem 0; padding: 0.6rem 0.8rem; background: #5b9bd10d; border: 1px solid var(--border); border-radius: 10px; }
+.dna-analysis-box .dna-sec-title { margin: 0 0 0.4rem; }
+.an-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.side-badge { font-size: 0.78rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; color: #fff; }
+.side-badge.side-p { background: #5b9bd1; }
+.side-badge.side-m { background: #dd8ba1; }
+.side-badge.side-u { background: #8a8577; }
+.an-label { font-size: 0.78rem; color: var(--muted); margin: 0.3rem 0 0.2rem; }
+.an-mrca.off { opacity: 0.7; }
+.an-place { font-size: 0.85rem; margin-top: 0.4rem; }
 .dna-pager { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1rem; }
 .dna-row { cursor: pointer; }
 .dna-row:hover { background: #4a7c5910; }
