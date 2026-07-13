@@ -460,3 +460,5 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .anc-frontiers { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.3rem 0; }
 .anc-frontier { border: 1px solid var(--border); border-radius: 14px; padding: 0.2rem 0.6rem; font-size: 0.82rem; cursor: pointer; background: var(--panel); }
 .anc-frontier:hover { background: #4a7c5915; border-color: var(--accent); }
+.anc-addbox { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.anc-addbox .person-picker { min-width: 220px; }

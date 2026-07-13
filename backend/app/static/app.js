@@ -2085,16 +2085,41 @@ function parseAncestorName(nm) {
   return { first_name: parts.join(" "), last_name: last, maiden_name: maiden };
 }
 
-async function addAncestorToTree(name, btn) {
-  const p = parseAncestorName(name);
-  try {
-    const created = await api("/api/individuals", { method: "POST",
-      json: { ...p, notes: "DNA ata önerisinden eklendi" } });
-    toast("Ağaca eklendi: " + name);
-    if (btn) { btn.textContent = "✓ eklendi"; btn.disabled = true; }
-    // eklenen kişiye git (ağaçta bağlamak için)
-    setTimeout(() => { location.hash = `#tab=people&person=${created.id}`; }, 600);
-  } catch (e) { toast(e.message || "Eklenemedi"); }
+function inferAncestorSex(positions) {
+  const t = (positions || []).join(" ").toLowerCase();
+  if (/anne|kad[ıi]n|k[ıi]z|han[ıi]m|bac[ıi]|teyze|hala/.test(t)) return "F";
+  if (/baba|dede|erkek|o[ğg]ul|amca|day[ıi]|bey/.test(t)) return "M";
+  return "U";
+}
+
+// Ata önerisini AĞACA BAĞLI ekle: "kimin ebeveyni?" seçtir, sonra kişi + ebeveyn bağını kur.
+function openAncestorAdd(actionEl, name, sex) {
+  actionEl.innerHTML = "";
+  const picker = createPersonPicker({ placeholder: "kimin ebeveyni? (ağaçtan seç)" });
+  const ekle = document.createElement("button");
+  ekle.className = "ghost sm"; ekle.textContent = "Ebeveyn olarak ekle";
+  const iptal = document.createElement("button");
+  iptal.className = "ghost sm"; iptal.textContent = "İptal";
+  const box = document.createElement("div");
+  box.className = "anc-addbox";
+  box.append(picker.el, ekle, iptal);
+  actionEl.append(box);
+  picker.el.querySelector("input").focus();
+  iptal.addEventListener("click", () => renderGenSub());
+  ekle.addEventListener("click", async () => {
+    const childId = picker.getId();
+    if (!childId) { toast("Önce ağaçtan bir kişi seç (bu ata onun ebeveyni olacak)"); return; }
+    ekle.disabled = true;
+    try {
+      const p = parseAncestorName(name);
+      const created = await api("/api/individuals", { method: "POST",
+        json: { ...p, sex, notes: "DNA ata önerisinden eklendi" } });
+      await api(`/api/individuals/${childId}/relationships`, { method: "POST",
+        json: { type: "parent", related_id: created.id } });
+      toast(`${p.first_name} eklendi ve ebeveyn olarak bağlandı`);
+      renderGenSub();
+    } catch (e) { toast(e.message || "Eklenemedi"); ekle.disabled = false; }
+  });
 }
 
 async function renderGenAncestors(view) {
@@ -2105,20 +2130,20 @@ async function renderGenAncestors(view) {
   const sug = d.suggestions || [];
   const newOnes = sug.filter((s) => !s.in_tree);
   const known = sug.filter((s) => s.in_tree);
-  const sRow = (s) => `<div class="anc-row ${s.in_tree ? "known" : "new"}">
+  const sRow = (s) => `<div class="anc-row ${s.in_tree ? "known" : "new"}" data-name="${esc(s.name)}" data-pos="${esc((s.positions || []).join("|"))}">
     <div class="anc-main">
       <b>${esc(s.name)}</b>
-      ${s.in_tree ? '<span class="anc-tag ok">✓ ağaçta</span>'
-        : `<button class="ghost sm" onclick="addAncestorToTree(${JSON.stringify(s.name).replace(/"/g, "&quot;")}, this)">+ Ağaca ekle</button>`}
+      <span class="anc-action">${s.in_tree ? '<span class="anc-tag ok">✓ ağaçta</span>'
+        : '<button class="ghost sm anc-add">+ Ağaca ekle</button>'}</span>
     </div>
     <div class="anc-sub muted sml">${s.support} eşleşme destekli${s.positions.length ? " · " + esc(s.positions.join(", ")) : ""}${s.matches.length ? " · " + esc(s.matches.slice(0, 4).join(", ")) : ""}</div>
   </div>`;
   const fRow = (f) => `<span class="anc-frontier" onclick="location.hash='#tab=tree&root=${f.individual_id}&dir=up&depth=3'" title="ağaçta göster (yukarı)">${esc(f.name)}${f.birth_date ? ` <span class="muted">${esc(f.birth_date)}</span>` : ""}</span>`;
   view.innerHTML = `
-    <div class="anc-note muted">Ağacı <b>yukarı genişletmek</b> için: DNA'daki ata isimleri (soyadı-eşleşen yakın akrabaların ağaçlarından) + ağacının uçları. Şu an derin-ata verisi az — limit açılıp daha çok yakın akraba çekildikçe artar.</div>
+    <div class="anc-note muted">Ağacı <b>yukarı genişletmek</b> için: DNA'daki ata isimleri + ağacının uçları. "Ağaca ekle" derken atayı <b>ağaçtaki bir kişinin ebeveyni</b> olarak bağlar (dümdüz eklemez). Derin-ata verisi az — limit açılıp daha çok yakın akraba çekildikçe artar.</div>
     <div class="anc-sec">
       <div class="an-label">🌱 DNA ata önerileri — ağaçta olmayan (${d.new_count})</div>
-      ${newOnes.length ? newOnes.map(sRow).join("") : '<p class="muted sml">Ağaçta olmayan yeni ata adayı yok. (Yakın akrabaların soyadları zaten ağaçta.)</p>'}
+      ${newOnes.length ? newOnes.map(sRow).join("") : '<p class="muted sml">Ağaçta olmayan yeni ata adayı yok. (Yakın akrabaların ataları zaten ağaçta.)</p>'}
     </div>
     <div class="anc-sec">
       <div class="an-label">DNA'nın doğruladığı, ağaçta olan atalar (${known.length})</div>
@@ -2129,6 +2154,11 @@ async function renderGenAncestors(view) {
       <div class="anc-frontiers">${(d.frontier || []).filter((f) => f.surname).slice(0, 60).map(fRow).join("")}</div>
       <div class="muted sml">Ebeveyni girilmemiş atalar. Tıkla → ağaçta yukarı bak; üstüne ebeveyn ekleyerek genişlet.</div>
     </div>`;
+  $$("#gen-view .anc-add").forEach((b) => b.addEventListener("click", () => {
+    const row = b.closest(".anc-row");
+    openAncestorAdd(row.querySelector(".anc-action"), row.dataset.name,
+      inferAncestorSex((row.dataset.pos || "").split("|")));
+  }));
 }
 
 function renderGenNetwork(g, view) {

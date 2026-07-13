@@ -646,15 +646,28 @@ def ancestor_suggestions(db: Session = Depends(get_db), _: User = Depends(get_cu
                 if pos:
                     c["positions"].add(pos)
                 c["matches"].add(r.name)
+    def _anc_intree(name):
+        """Ata adı ağaçta mı? Tam ad + (ilk ad + kızlık soyadı) dener — kadın atalar
+        evlilik soyadıyla gelir ('Emine AKTAŞ (doğum ÇAKIR)' -> ağaçtaki 'Emine ÇAKIR')."""
+        keys = {_norm(name)}
+        m = re.search(r"\(\s*do[ğg]um\s+([^)]+)\)", name, re.I)
+        parts = name.split()
+        if m and parts:
+            keys.add(_norm(f"{parts[0]} {m.group(1)}"))
+        for k in keys:
+            if byname.get(k):
+                return byname[k][0].id
+        return None
+
     suggestions = []
     for k, c in cand.items():
-        tp = byname.get(k)
+        iid = _anc_intree(c["name"])
         suggestions.append({
             "name": c["name"], "norm": k,
             "support": c["support"], "positions": sorted(c["positions"])[:3],
             "matches": sorted(c["matches"])[:6],
-            "in_tree": bool(tp),
-            "individual_id": tp[0].id if tp else None,
+            "in_tree": iid is not None,
+            "individual_id": iid,
         })
     suggestions.sort(key=lambda x: (x["in_tree"], -x["support"]))
     return {
