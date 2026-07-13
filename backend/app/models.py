@@ -194,6 +194,7 @@ class DnaMatch(Base):
     detail_url: Mapped[str] = mapped_column(Text, default="")
     detail_json: Mapped[str] = mapped_column(Text, default="")
     detail_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tofr_side: Mapped[str] = mapped_column(String(12), default="")  # paternal|maternal (çapa için)
     # Sonradan sistemdeki bir kişiye bağlamak için (eşleştirme testleri)
     individual_id: Mapped[int | None] = mapped_column(
         ForeignKey("individuals.id", ondelete="SET NULL"), nullable=True

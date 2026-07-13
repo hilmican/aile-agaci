@@ -111,6 +111,7 @@ def save_detail(
         return {"ok": False, "error": "Eşleşme bulunamadı"}
     row.detail_json = json.dumps(detail, ensure_ascii=False)
     row.detail_at = datetime.now(timezone.utc)
+    row.tofr_side = _side_from_eps(detail.get("endpoints", {}) if isinstance(detail, dict) else {})
     if payload.get("detail_url"):
         row.detail_url = payload["detail_url"]
     log_activity(db, user, "dna_detail", None, f"{row.name} detayları çekildi")
@@ -129,6 +130,30 @@ def _dig(o, *path):
         if o is None:
             return None
     return o
+
+
+def _side_from_eps(eps: dict) -> str:
+    """ToFR description_with_side'dan taraf: paternal | maternal | ''."""
+    tofr = _dig(eps, "dna_single_match_get_theories_of_family_relativity",
+                "data", "dna_match", "theories", "data") or []
+    for th in tofr:
+        s = _norm(_dig(th, "relationship", "description_with_side") or "")
+        if "baban" in s:
+            return "paternal"
+        if "annen" in s or "anneniz" in s:
+            return "maternal"
+    return ""
+
+
+def _shared_names(eps: dict) -> list[str]:
+    sm = _dig(eps, "dna_single_match_get_shared_matches",
+              "data", "dna_match", "dna_shared_matches", "data") or []
+    out = []
+    for x in sm:
+        nm = (x.get("shared_member") or x.get("shared_individual") or {}).get("name")
+        if nm:
+            out.append(nm)
+    return out
 
 
 def _rel_to_gen(rel: str) -> int | None:
@@ -184,13 +209,7 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
     # Taraf (ToFR'den)
     tofr = _dig(eps, "dna_single_match_get_theories_of_family_relativity",
                 "data", "dna_match", "theories", "data") or []
-    side = "unknown"
-    for th in tofr:
-        s = _norm(_dig(th, "relationship", "description_with_side") or "")
-        if "baban" in s:
-            side = "paternal"; break
-        if "annen" in s or "anneniz" in s:
-            side = "maternal"; break
+    side = _side_from_eps(eps) or "unknown"
     side_short = {"paternal": "P", "maternal": "M"}.get(side)
 
     gen = _rel_to_gen(row.relationship)
@@ -254,6 +273,38 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
             if _norm(nm) == _norm(row.name) and self_link is None:
                 self_link = entry
 
+    # ---- In-common taraf çıkarımı ----
+    # Çapa haritası: taraf'ı bilinen (ToFR) eşleşmeler. Eksikleri detaydan doldur.
+    inferred_side = None
+    inferred_votes = {"paternal": 0, "maternal": 0}
+    anchors_shared = []
+    if side == "unknown":
+        anchor = {}
+        dirty = False
+        for other in db.scalars(select(DnaMatch).where(DnaMatch.detail_json != "")).all():
+            if other.id == row.id:
+                continue
+            os_ = other.tofr_side
+            if not os_:  # eski kayıt: detaydan hesapla ve sakla (self-heal)
+                try:
+                    os_ = _side_from_eps((json.loads(other.detail_json) or {}).get("endpoints", {}))
+                except Exception:
+                    os_ = ""
+                if os_ != (other.tofr_side or ""):
+                    other.tofr_side = os_; dirty = True
+            if os_:
+                anchor[_norm(other.name)] = (os_, other.name)
+        if dirty:
+            db.commit()
+        for nm in _shared_names(eps):
+            hit = anchor.get(_norm(nm))
+            if hit:
+                inferred_votes[hit[0]] += 1
+                anchors_shared.append({"name": hit[1], "side": hit[0]})
+        if inferred_votes["paternal"] or inferred_votes["maternal"]:
+            inferred_side = ("paternal" if inferred_votes["paternal"] >= inferred_votes["maternal"]
+                             else "maternal")
+
     cm = row.shared_cm_val or 0
     conf = ("çok yüksek" if cm >= 1300 else "yüksek" if cm >= 500
             else "orta" if cm >= 200 else "düşük")
@@ -271,6 +322,11 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
         "tree_overlap_count": len(overlap),
         "pedigree_names": len([n for n in pnames if n and n != "Bilinmiyor"]),
         "self_in_tree": self_link,
+        # In-common taraf çıkarımı (taraf bilinmiyorsa)
+        "inferred_side": inferred_side,
+        "inferred_side_tr": {"paternal": "Baba tarafı", "maternal": "Anne tarafı"}.get(inferred_side),
+        "inferred_votes": inferred_votes,
+        "anchors_shared": anchors_shared,
     }
 
 

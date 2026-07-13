@@ -228,6 +228,7 @@ label input, label select { color: var(--ink); }
 .an-label { font-size: 0.78rem; color: var(--muted); margin: 0.3rem 0 0.2rem; }
 .an-mrca.off { opacity: 0.7; }
 .an-place { font-size: 0.85rem; margin-top: 0.4rem; }
+.an-infer { font-size: 0.82rem; background: #5b9bd112; border-radius: 8px; padding: 0.4rem 0.6rem; margin: 0.3rem 0; }
 .an-indep { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); }
 .an-self { font-size: 0.85rem; color: #2f5d3f; margin: 0.2rem 0; }
 .dna-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.7rem; font-size: 0.85rem; }

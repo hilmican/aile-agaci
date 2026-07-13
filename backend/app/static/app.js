@@ -1873,7 +1873,12 @@ async function renderDnaAnalysis(m) {
   catch (_) { box.textContent = "Analiz yüklenemedi."; return; }
   if (!a.available) { box.innerHTML = '<span class="muted">Analiz için detay çekilmeli.</span>'; return; }
   box.className = "";
-  const sideCls = a.side === "paternal" ? "side-p" : a.side === "maternal" ? "side-m" : "side-u";
+  // Taraf: ToFR varsa o; yoksa in-common çıkarımı; o da yoksa belirsiz.
+  const effSide = a.side !== "unknown" ? a.side : a.inferred_side;
+  const inferred = a.side === "unknown" && a.inferred_side;
+  const sideCls = effSide === "paternal" ? "side-p" : effSide === "maternal" ? "side-m" : "side-u";
+  const sideLabel = inferred ? `${a.inferred_side_tr} (in-common)`
+    : effSide === "paternal" ? "Baba tarafı" : effSide === "maternal" ? "Anne tarafı" : "Belirsiz";
   const chip = (x) => x.individual_id
     ? `<span class="chip an-mrca" data-goto-person="${x.individual_id}">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`
     : `<span class="chip an-mrca off">${esc(x.name)} <span class="muted">${esc(x.position)}</span></span>`;
@@ -1901,9 +1906,16 @@ async function renderDnaAnalysis(m) {
     indep = `<div class="an-indep muted">🌳 Bizim ağaç kesişimi: eşleşmenin ağacında (${a.pedigree_names || 0} kişi)
       bizim ağaçla örtüşen kişi yok — bağımsız yerleştirilemez.</div>`;
   }
+  const inferNote = inferred
+    ? `<div class="an-infer">🧩 Taraf, ortak eşleşme kümelemesiyle çıkarıldı:
+        bilinen ${a.inferred_side_tr.toLowerCase()} akrabalarından
+        <b>${a.anchors_shared.length}</b>'i (${esc(a.anchors_shared.map((x) => x.name).slice(0, 4).join(", "))})
+        ile ortak DNA. <span class="muted">(kesin değil, olasılık)</span></div>`
+    : "";
   box.innerHTML = `
-    <div class="an-row"><span class="side-badge ${sideCls}">${esc(a.side_tr)}</span>
+    <div class="an-row"><span class="side-badge ${sideCls}">${esc(sideLabel)}</span>
       <span class="muted">Güven: ${esc(a.confidence)}${a.has_theory ? " · ToFR ✓" : ""} · tahmini ~${a.mrca_generation || "?"}. nesil</span></div>
+    ${inferNote}
     <div class="an-label">MyHeritage'a göre olası ortak ata (MRCA):</div>
     <div class="rel-chips">${mrcaHtml}</div>
     <div class="an-place">${place}</div>

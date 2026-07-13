@@ -85,6 +85,7 @@ def ensure_schema() -> None:
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_url TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_json TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_at TIMESTAMPTZ",
+        "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS tofr_side VARCHAR(12) NOT NULL DEFAULT ''",
         # Eski serbest 'period' değerini başlangıç sütununa taşı (yalnız boşsa).
         "UPDATE residences SET period_start = period WHERE period_start = '' AND period <> ''",
     ]
