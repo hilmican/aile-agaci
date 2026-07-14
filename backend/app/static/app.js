@@ -2028,23 +2028,58 @@ const GEN = { data: null, sub: "network" };
 const SIDE_COLOR = { paternal: "#5b9bd1", maternal: "#dd8ba1", unknown: "#b6b6be" };
 const SIDE_LABEL = { paternal: "Baba tarafı", maternal: "Anne tarafı", unknown: "Belirsiz" };
 
+function genRoot() { return Number(localStorage.getItem("genRoot") || 3); }
+
 async function openGenTree() {
   switchTab("gentree");
   const view = $("#gen-view");
   view.innerHTML = '<p class="muted">Yükleniyor…</p>';
   try {
-    GEN.data = await api("/api/dna/graph");
+    GEN.data = await api(`/api/dna/graph?root=${genRoot()}`);
   } catch (e) {
     view.innerHTML = '<p class="muted">Veri alınamadı.</p>';
     return;
   }
-  const c = GEN.data.counts;
-  $("#gen-summary").textContent =
-    `${GEN.data.nodes.length} detaylı düğüm / ${GEN.data.total_matches} eşleşme · ` +
-    `Baba ${c.paternal} · Anne ${c.maternal} · Belirsiz ${c.unknown}`;
+  const c = GEN.data.counts, lc = GEN.data.line_counts;
+  let sum = `${GEN.data.nodes.length} detaylı / ${GEN.data.total_matches} eşleşme · Baba ${c.paternal} · Anne ${c.maternal} · Belirsiz ${c.unknown}`;
+  if (lc && (lc.paternal || lc.maternal || lc.both))
+    sum += `  ·  kol (yapısal): baba ${lc.paternal} / anne ${lc.maternal} / iki-taraf ${lc.both + lc.shared}`;
+  $("#gen-summary").textContent = sum;
+  renderEndogamy(GEN.data.convergence);
   renderGenLegend();
   renderGenSub();
   refreshDnaProgress();
+}
+
+function renderEndogamy(conv) {
+  const el = $("#gen-endogamy");
+  if (!el) return;
+  if (!conv || !conv.convergence || !conv.convergence.length) { el.innerHTML = ""; return; }
+  const top = conv.convergence[0];
+  const deg = conv.parents_cousin_degree;
+  el.innerHTML = `<div class="endo-banner">
+    ⚠️ <b>Endogami:</b> ${esc(conv.mother ? conv.mother.name : "anne")} &amp; ${esc(conv.father ? conv.father.name : "baba")}
+    ${deg ? `<b>${deg}. dereceden kuzen</b>` : "akraba"} —
+    <span class="endo-hub" onclick="location.hash='#tab=tree&root=${top.individual_id}&dir=up&depth=4'">${esc(top.name)}${top.birth_date ? " (" + esc(top.birth_date) + ")" : ""}</span>'de birleşiyorlar.
+    Anne ve baba kolun bu atada kaynaştığından <b>baba/anne etiketleri ve cM tahminleri bulanıktır</b>; bu atanın üstünden bağlanan eşleşmeler her iki taraftandır.
+    <span class="muted">(DNA sahibi: ${esc(conv.root === genRoot() ? "" : "")}<a class="endo-chg" onclick="changeGenRoot()">kök kişiyi değiştir</a>)</span>
+  </div>`;
+}
+
+async function changeGenRoot() {
+  const cur = genRoot();
+  const holder = $("#gen-endogamy");
+  holder.innerHTML = '<div class="endo-banner">DNA testini kim yaptı? <span id="gen-root-pick"></span></div>';
+  const picker = createPersonPicker({ placeholder: "kök kişi (DNA sahibi) ara…" });
+  const ok = document.createElement("button");
+  ok.className = "ghost sm"; ok.textContent = "Ayarla";
+  $("#gen-root-pick").append(picker.el, ok);
+  ok.addEventListener("click", () => {
+    const id = picker.getId();
+    if (!id) { toast("Bir kişi seç"); return; }
+    localStorage.setItem("genRoot", String(id));
+    openGenTree();
+  });
 }
 
 $$(".gen-sub").forEach((b) => b.addEventListener("click", () => {
@@ -2209,8 +2244,10 @@ function renderGenNetwork(g, view) {
     .on("click", (e, d) => openDnaDetail(d.id))
     .on("mouseenter", (e, d) => focusNode(d._i))
     .on("mouseleave", () => focusNode(null));
+  const nodeColor = (n) => n.line === "maternal" ? "#c0508a" : n.line === "paternal" ? "#3f7fbf"
+    : (n.line === "both" || n.line === "shared") ? "#8a6fbf" : (SIDE_COLOR[n.side] || SIDE_COLOR.unknown);
   node.append("circle").attr("r", rad)
-    .attr("fill", (n) => SIDE_COLOR[n.side] || SIDE_COLOR.unknown)
+    .attr("fill", nodeColor)
     .attr("stroke", (n) => n.linked ? "#e0a400" : (n.overlap && n.overlap.length ? "#3a9d4a" : "#fff"))
     .attr("stroke-width", (n) => (n.linked || (n.overlap && n.overlap.length)) ? 3 : 1.2);
   node.append("title").text((n) => `${n.name}\n${Math.round(n.cm)} cM · ${SIDE_LABEL[n.side]}${n.seed ? " (ToFR)" : ""}` +

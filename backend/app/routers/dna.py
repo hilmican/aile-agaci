@@ -533,14 +533,32 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
 
 
 @router.get("/graph")
-def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def dna_graph(root: int | None = None, db: Session = Depends(get_db),
+              _: User = Depends(get_current_user)):
     """Gen Ağacı verisi: detaylı eşleşmeler (düğüm) + ortak DNA (kenar) + taraf
-    kümesi + ağaç kesişimleri. Üç görünümü de (küme ağı, varsayımsal soy,
-    ağaç katmanı) tek kaynaktan besler."""
+    kümesi + ağaç kesişimleri. root verilirse endogami-farkında kol (anne/baba/
+    her-iki-taraf) etiketi de eklenir."""
     from collections import defaultdict
     clusters = _cluster_sides(db)
     rows = [r for r in db.scalars(select(DnaMatch)).all() if r.detail_json]
     byname, parents_ids, id2ind, byfirst = _tree_index(db)
+    conv = _convergence(db, root) if root else None
+    fo = set(conv["father_only"]) if conv and conv.get("available") else set()
+    mo = set(conv["mother_only"]) if conv and conv.get("available") else set()
+
+    def _line(ov_ids):
+        """Yapısal kesişim atalarına göre kol: paternal/maternal/both/None."""
+        if not conv or not conv.get("available"):
+            return None
+        hf = any(i in fo for i in ov_ids)
+        hm = any(i in mo for i in ov_ids)
+        if hf and not hm:
+            return "paternal"
+        if hm and not hf:
+            return "maternal"
+        if hf and hm:
+            return "both"
+        return "shared"  # yalnız birleşim-üstü (derin, her iki taraf)
 
     nodes = []
     idx = {}
@@ -563,12 +581,13 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         # YAPISAL pedigree kesişimi (ebeveyn korroborasyonlu; yaygın-ad false-positive'siz)
         ov = [{"individual_id": o["individual_id"], "name": o["name"]}
               for o in _tree_overlap(eps, byfirst, parents_ids, id2ind, r.shared_cm_val or 0) if o["strong"]]
+        line = _line([o["individual_id"] for o in ov] + ([linked["individual_id"]] if linked else []))
         i = len(nodes)
         idx[nn] = i
         nodes.append({
             "id": r.id, "name": r.name, "cm": r.shared_cm_val or 0,
             "side": eff, "seed": bool(r.manual_side or r.tofr_side), "gen": gen,
-            "relationship": r.relationship, "linked": linked, "overlap": ov,
+            "relationship": r.relationship, "linked": linked, "overlap": ov, "line": line,
         })
         shared_sets[nn] = set(_norm(x) for x in _shared_names(eps))
         if linked:
@@ -601,9 +620,82 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     counts = {"paternal": 0, "maternal": 0, "unknown": 0}
     for n in nodes:
         counts[n["side"]] = counts.get(n["side"], 0) + 1
+    line_counts = {"paternal": 0, "maternal": 0, "both": 0, "shared": 0}
+    for n in nodes:
+        if n.get("line") in line_counts:
+            line_counts[n["line"]] += 1
     return {"nodes": nodes, "edges": [[a, b] for a, b in edges],
-            "tree_links": tl, "counts": counts, "total_matches": db.scalar(
-                select(func.count()).select_from(DnaMatch)) or 0}
+            "tree_links": tl, "counts": counts, "line_counts": line_counts,
+            "convergence": conv if conv and conv.get("available") else None,
+            "total_matches": db.scalar(select(func.count()).select_from(DnaMatch)) or 0}
+
+
+def _ancestor_gens(root_id: int, parents_ids, max_gen: int = 14) -> dict:
+    """root'tan yukarı atalar: {id: en küçük nesil}. root gen 0."""
+    from collections import deque
+    out = {}
+    q = deque([(root_id, 0)])
+    while q:
+        iid, g = q.popleft()
+        if g > max_gen or (iid in out and out[iid] <= g):
+            continue
+        out[iid] = g
+        for pid in parents_ids.get(iid, ()):
+            q.append((pid, g + 1))
+    return out
+
+
+_CONV_CACHE: dict = {"key": None, "val": None}
+
+
+def _convergence(db: Session, root: int) -> dict:
+    """Bir kişinin anne ve baba kollarının ağaçta birleşip birleşmediğini (endogami)
+    bulur. Birleşim atası + kuzen derecesi + anne/baba/her-iki-taraf ata kümeleri."""
+    byname, parents_ids, id2ind, byfirst = _tree_index(db)
+    key = (root, len(id2ind), sum(len(v) for v in parents_ids.values()))
+    if _CONV_CACHE["key"] == key:
+        return _CONV_CACHE["val"]
+    r = id2ind.get(root)
+    if not r:
+        return {"available": False, "reason": "kök kişi yok"}
+    pars = [id2ind[pid] for pid in parents_ids.get(root, ()) if id2ind.get(pid)]
+    if len(pars) < 2:
+        return {"available": False, "reason": "iki ebeveyn girili değil"}
+    father = next((p for p in pars if p.sex == "M"), pars[0])
+    mother = next((p for p in pars if p.sex == "F" and p.id != father.id), None)
+    if mother is None:
+        mother = next((p for p in pars if p.id != father.id), None)
+    fa = _ancestor_gens(father.id, parents_ids)
+    ma = _ancestor_gens(mother.id, parents_ids)
+    shared = set(fa) & set(ma)
+    father_only = set(fa) - shared
+    mother_only = set(ma) - shared
+
+    def brief(i):
+        p = id2ind[i]
+        return {"individual_id": i, "name": f"{p.first_name} {p.last_name}".strip(),
+                "birth_date": p.birth_date, "gen_f": fa.get(i), "gen_m": ma.get(i)}
+    conv = sorted((i for i in shared if fa[i] > 0 and ma[i] > 0),
+                  key=lambda i: (fa[i] + ma[i], fa[i]))
+    top = [brief(i) for i in conv][:8]
+    degree = (top[0]["gen_f"] - 1) if top else None  # n. göbekten kuzen (ebeveynler)
+    val = {
+        "available": True, "root": root,
+        "father": {"individual_id": father.id, "name": f"{father.first_name} {father.last_name}".strip()},
+        "mother": {"individual_id": mother.id, "name": f"{mother.first_name} {mother.last_name}".strip()} if mother else None,
+        "convergence": top, "parents_cousin_degree": degree,
+        "father_only": sorted(father_only), "mother_only": sorted(mother_only),
+        "shared": sorted(shared),
+    }
+    _CONV_CACHE["key"] = key
+    _CONV_CACHE["val"] = val
+    return val
+
+
+@router.get("/convergence")
+def convergence(root: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Kök kişinin (DNA sahibi) anne-baba kollarının birleşimi (endogami tespiti)."""
+    return _convergence(db, root)
 
 
 @router.get("/ancestor-suggestions")

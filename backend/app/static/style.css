@@ -462,3 +462,7 @@ button.ghost.sm { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
 .anc-frontier:hover { background: #4a7c5915; border-color: var(--accent); }
 .anc-addbox { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
 .anc-addbox .person-picker { min-width: 220px; }
+/* Endogami / birleşim bandı */
+.endo-banner { background: #dd8ba114; border: 1px solid #dd8ba1; border-radius: 10px; padding: 0.55rem 0.75rem; margin: 0.3rem 0 0.6rem; font-size: 0.85rem; line-height: 1.4; }
+.endo-hub { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: underline; }
+.endo-chg { color: var(--accent); cursor: pointer; text-decoration: underline; }
