@@ -546,19 +546,25 @@ def dna_graph(root: int | None = None, db: Session = Depends(get_db),
     fo = set(conv["father_only"]) if conv and conv.get("available") else set()
     mo = set(conv["mother_only"]) if conv and conv.get("available") else set()
 
+    sh = set(conv["shared"]) if conv and conv.get("available") else set()
+
     def _line(ov_ids):
-        """Yapısal kesişim atalarına göre kol: paternal/maternal/both/None."""
-        if not conv or not conv.get("available"):
+        """Yapısal kesişim atalarına göre kol: paternal/maternal/both/shared/None.
+        Hiç kesişim yoksa (yerleştirilemedi) None — 'shared' DEĞİL."""
+        if not conv or not conv.get("available") or not ov_ids:
             return None
         hf = any(i in fo for i in ov_ids)
         hm = any(i in mo for i in ov_ids)
+        hs = any(i in sh for i in ov_ids)
         if hf and not hm:
             return "paternal"
         if hm and not hf:
             return "maternal"
         if hf and hm:
             return "both"
-        return "shared"  # yalnız birleşim-üstü (derin, her iki taraf)
+        if hs:
+            return "shared"  # yalnız birleşim-üstü (derin, her iki taraf)
+        return None  # ağaçta ama ne baba/anne/paylaşılan koluna düşmedi (kopya vb.)
 
     nodes = []
     idx = {}
@@ -675,8 +681,12 @@ def _convergence(db: Session, root: int) -> dict:
         p = id2ind[i]
         return {"individual_id": i, "name": f"{p.first_name} {p.last_name}".strip(),
                 "birth_date": p.birth_date, "gen_f": fa.get(i), "gen_m": ma.get(i)}
+    # En yakın birleşim; eşitlikte tarihli+adı olanı öne al (isimsiz eşi değil kendisi).
     conv = sorted((i for i in shared if fa[i] > 0 and ma[i] > 0),
-                  key=lambda i: (fa[i] + ma[i], fa[i]))
+                  key=lambda i: (fa[i] + ma[i], fa[i],
+                                 0 if (id2ind[i].birth_date or "").strip() else 1,
+                                 0 if (id2ind[i].last_name or "").strip() else 1,
+                                 -len(f"{id2ind[i].first_name} {id2ind[i].last_name}")))
     top = [brief(i) for i in conv][:8]
     degree = (top[0]["gen_f"] - 1) if top else None  # n. göbekten kuzen (ebeveynler)
     val = {
