@@ -247,11 +247,12 @@ def _ped_parents(ind: dict, inds: dict, fams: dict) -> list:
     return out
 
 
-def _tree_overlap(eps: dict, byfirst, parents_ids, id2ind) -> list:
+def _tree_overlap(eps: dict, byfirst, parents_ids, id2ind, match_cm: float = 0.0) -> list:
     """YAPISAL ağaç kesişimi — SOYADSIZ. Pedigree bireyinin İLK adı bizim ağaçtaki
-    biriyle eşleşiyor VE en az bir ebeveyninin İLK adı (baba/ana adı) da eşleşiyorsa
-    'güçlü'. Soyadı hiç kullanılmaz (1934 kanunu; eski atalarda yok/yanlış olabilir).
-    İlk ad tek başına yetersiz (yaygın adlar) → ebeveyn adı korroborasyonu ŞART."""
+    biriyle eşleşiyor VE ebeveyninin İLK adı (baba/ana adı) da eşleşiyorsa aday.
+    Soyadı hiç kullanılmaz (1934 kanunu; eski atalarda yok/yanlış olabilir).
+    Yaygın-ad + tek ebeveyn uzak eşleşmelerde güvenilmez -> 'güçlü' sayılması için:
+    iki ebeveyn de eşleşmeli (score>=2) VEYA yakın akraba olmalı (cM>=150)."""
     ai, inds, fams = _pedigree_individuals(eps)
     out, seen = [], set()
     for ind in inds.values():
@@ -271,7 +272,8 @@ def _tree_overlap(eps: dict, byfirst, parents_ids, id2ind) -> list:
             tpar = _tree_parent_firstnames(T.id, parents_ids, id2ind)
             matched = ped_par & tpar
             if not matched:
-                continue  # ebeveyn ilk-adı eşleşmiyor -> ele (ilk ad tek başına yetersiz)
+                continue  # ebeveyn ilk-adı eşleşmiyor -> ele
+            strong = len(matched) >= 2 or match_cm >= 150
             seen.add(T.id)
             mp = [{"name": f"{id2ind[pid].first_name} {id2ind[pid].last_name}".strip(),
                    "individual_id": pid}
@@ -280,7 +282,7 @@ def _tree_overlap(eps: dict, byfirst, parents_ids, id2ind) -> list:
             out.append({
                 "name": f"{T.first_name} {T.last_name}".strip(),
                 "individual_id": T.id, "ped_name": ind.get("name"),
-                "score": len(matched), "strong": True,
+                "score": len(matched), "strong": strong,
                 "is_root": bool(ai) and ind.get("id") == ai.get("id"),
                 "matched_parents": mp,
             })
@@ -288,13 +290,13 @@ def _tree_overlap(eps: dict, byfirst, parents_ids, id2ind) -> list:
     return out
 
 
-def _match_tree(eps: dict, byfirst, parents_ids, id2ind) -> dict | None:
+def _match_tree(eps: dict, byfirst, parents_ids, id2ind, match_cm: float = 0.0) -> dict | None:
     """Eşleşmenin yakın ailesini (kök + ebeveyn/eş/çocuk) ilişki etiketiyle döndürür;
     bizim ağaçla eşleşen bireyleri (yapısal) individual_id ile işaretler. Görselleştirme için."""
     ai, inds, fams = _pedigree_individuals(eps)
     if not ai:
         return None
-    strong = {o["ped_name"]: o for o in _tree_overlap(eps, byfirst, parents_ids, id2ind)}
+    strong = {o["ped_name"]: o for o in _tree_overlap(eps, byfirst, parents_ids, id2ind, match_cm) if o["strong"]}
     root_id = ai.get("id")
     par_ids = {p.get("id") for p in _ped_parents(ai, inds, fams)}
     spouse_ids = set()
@@ -479,9 +481,9 @@ def analysis(match_id: int, db: Session = Depends(get_db), _: User = Depends(get
 
     # Bağımsız YAPISAL katman: eşleşmenin pedigree'sini (birey + ebeveyn ilişkileri)
     # bizim ağaçla kesiştir. Yalnız ad benzerliği değil, ebeveyn korroborasyonu aranır.
-    overlap = _tree_overlap(eps, byfirst, parents_ids, id2ind)
+    overlap = _tree_overlap(eps, byfirst, parents_ids, id2ind, row.shared_cm_val or 0)
     self_link = next((o for o in overlap if o["is_root"] and o["strong"]), None)
-    match_tree = _match_tree(eps, byfirst, parents_ids, id2ind)
+    match_tree = _match_tree(eps, byfirst, parents_ids, id2ind, row.shared_cm_val or 0)
     tree_url = ""
     try:
         raw = json.loads(row.raw) if row.raw else {}
@@ -560,7 +562,7 @@ def dna_graph(db: Session = Depends(get_db), _: User = Depends(get_current_user)
                 linked = {"individual_id": ind.id, "name": f"{ind.first_name} {ind.last_name}".strip()}
         # YAPISAL pedigree kesişimi (ebeveyn korroborasyonlu; yaygın-ad false-positive'siz)
         ov = [{"individual_id": o["individual_id"], "name": o["name"]}
-              for o in _tree_overlap(eps, byfirst, parents_ids, id2ind) if o["strong"]]
+              for o in _tree_overlap(eps, byfirst, parents_ids, id2ind, r.shared_cm_val or 0) if o["strong"]]
         i = len(nodes)
         idx[nn] = i
         nodes.append({
