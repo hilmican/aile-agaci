@@ -32,6 +32,10 @@ def make_thumbnail(upload_dir: str, filename: str, size: int = THUMB_SIZE) -> st
     dst = os.path.join(upload_dir, out_name)
     if os.path.isfile(dst):
         return out_name
+    # Aynı volume'e birden fazla pod yazabiliyor (rolling deploy + preprod aynı
+    # PVC'yi mount ediyor). Geçici dosyaya yazıp atomik rename ile yerine koy:
+    # yarım yazılmış bir webp asla servis edilmesin.
+    tmp = f"{dst}.{os.getpid()}.tmp"
     try:
         with Image.open(src) as im:
             # Telefon fotoğraflarındaki EXIF döndürme bilgisini piksele uygula.
@@ -41,12 +45,13 @@ def make_thumbnail(upload_dir: str, filename: str, size: int = THUMB_SIZE) -> st
             # CSS tarafında object-fit: cover kullanılıyor; aynı kırpmayı
             # burada yapıyoruz ki kare kutuda hep yüz ortada kalsın.
             im = ImageOps.fit(im, (size, size), method=Image.LANCZOS, centering=(0.5, 0.35))
-            im.save(dst, "WEBP", quality=80, method=4)
+            im.save(tmp, "WEBP", quality=80, method=4)
+        os.replace(tmp, dst)
         return out_name
     except Exception:  # bozuk/desteklenmeyen dosya — orijinale düşülür
         try:
-            if os.path.isfile(dst):
-                os.remove(dst)
+            if os.path.isfile(tmp):
+                os.remove(tmp)
         except OSError:
             pass
         return ""
