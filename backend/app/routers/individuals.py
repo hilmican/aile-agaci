@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..activity import log_activity
 from ..config import settings
 from ..database import get_db
+from ..images import make_thumbnail
 from ..models import (
     Anecdote, Family, Individual, IndividualFamily, Media, ParentChild, Residence, Spouse,
 )
@@ -37,10 +38,40 @@ router = APIRouter(prefix="/api/individuals", tags=["individuals"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
-def _media_out(m: Media) -> MediaOut:
+def _media_out(m: Media, primary_id: int | None = None) -> MediaOut:
     out = MediaOut.model_validate(m)
     out.url = f"/uploads/{m.filename}"
+    # Küçük sürüm yoksa (eski kayıt / üretilemedi) orijinale düş.
+    out.thumb_url = f"/uploads/{m.thumb_filename}" if m.thumb_filename else out.url
+    out.is_primary = primary_id is not None and m.id == primary_id
     return out
+
+
+def _primary_media(ind: Individual) -> Media | None:
+    """Ağaçta/listelerde gösterilecek görsel: seçilmişse o, yoksa ilk görsel."""
+    if not ind.media:
+        return None
+    if ind.primary_media_id:
+        for m in ind.media:
+            if m.id == ind.primary_media_id:
+                return m
+    return ind.media[0]
+
+
+def _primary_id(ind: Individual) -> int | None:
+    m = _primary_media(ind)
+    return m.id if m else None
+
+
+def person_photo_url(ind: Individual) -> str | None:
+    """Kişi kartı fotoğrafı — daima KÜÇÜK sürüm (yoksa orijinal).
+
+    Ağaç, anasayfa ızgarası gibi çok sayıda kartın aynı anda çizildiği yerlerde
+    orijinal dosyaları çekmek megabaytlarca gereksiz trafik demek."""
+    m = _primary_media(ind)
+    if m is None:
+        return None
+    return f"/uploads/{m.thumb_filename or m.filename}"
 
 
 def _parents(db: Session, ind_id: int) -> list[Individual]:
@@ -77,7 +108,7 @@ def _detail(db: Session, ind: Individual) -> IndividualDetail:
     detail.parents = [IndividualSummary.model_validate(p) for p in _parents(db, ind.id)]
     detail.children = [IndividualSummary.model_validate(c) for c in _children(db, ind.id)]
     detail.spouses = _spouse_links(db, ind.id)
-    detail.media = [_media_out(m) for m in ind.media]
+    detail.media = [_media_out(m, _primary_id(ind)) for m in ind.media]
     detail.anecdotes = [
         AnecdoteOut.model_validate(a)
         for a in db.scalars(
@@ -220,6 +251,8 @@ def delete_individual(ind_id: int, db: Session = Depends(get_db), user: User = D
         raise HTTPException(status_code=404, detail="Kişi bulunamadı")
     for m in ind.media:
         _remove_file(m.filename)
+        if m.thumb_filename:
+            _remove_file(m.thumb_filename)
     log_activity(db, user, "person_deleted", ind)
     db.delete(ind)
     db.commit()
@@ -371,7 +404,7 @@ def pedigree(
             "birth_date": ind.birth_date,
             "birth_place": ind.birth_place,
             "death_date": ind.death_date,
-            "photo": f"/uploads/{ind.media[0].filename}" if ind.media else None,
+            "photo": person_photo_url(ind),
             "emblem": emblem_of.get(ind.id, ""),
             "has_anecdotes": ind.id in anecdote_ids,
         }
@@ -563,6 +596,8 @@ async def upload_media(
     media = Media(
         individual_id=ind.id,
         filename=filename,
+        # Ağaç/liste görünümleri için küçük sürüm (üretilemezse boş kalır).
+        thumb_filename=make_thumbnail(settings.upload_dir, filename),
         original_name=file.filename or "",
         content_type=file.content_type or "",
         caption=caption,
@@ -571,7 +606,11 @@ async def upload_media(
     log_activity(db, user, "media_added", ind)
     db.commit()
     db.refresh(media)
-    return _media_out(media)
+    # İlk görselse ağaçta o kullanılsın (sonradan değiştirilebilir).
+    if not ind.primary_media_id:
+        ind.primary_media_id = media.id
+        db.commit()
+    return _media_out(media, ind.primary_media_id)
 
 
 @router.delete("/{ind_id}/media/{media_id}", status_code=204)
@@ -585,11 +624,42 @@ def delete_media(
     if media is None or media.individual_id != ind_id:
         raise HTTPException(status_code=404, detail="Görsel bulunamadı")
     _remove_file(media.filename)
+    if media.thumb_filename:
+        _remove_file(media.thumb_filename)
     db.delete(media)
     ind = db.get(Individual, ind_id)
     if ind is not None:
         log_activity(db, user, "media_deleted", ind)
+        # Ağaçta kullanılan görsel silindiyse kalanlardan birine geç.
+        if ind.primary_media_id == media_id:
+            db.flush()
+            rest = [m for m in ind.media if m.id != media_id]
+            ind.primary_media_id = rest[0].id if rest else None
     db.commit()
+
+
+@router.post("/{ind_id}/media/{media_id}/primary", response_model=MediaOut)
+def set_primary_media(
+    ind_id: int,
+    media_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_editor),
+):
+    """Ağaç kartında ve listelerde gösterilecek görseli seç."""
+    ind = db.get(Individual, ind_id)
+    if ind is None:
+        raise HTTPException(status_code=404, detail="Kişi bulunamadı")
+    media = db.get(Media, media_id)
+    if media is None or media.individual_id != ind_id:
+        raise HTTPException(status_code=404, detail="Görsel bulunamadı")
+    # Eski kayıtta küçük sürüm yoksa fırsat bu fırsat: şimdi üret.
+    if not media.thumb_filename:
+        media.thumb_filename = make_thumbnail(settings.upload_dir, media.filename)
+    ind.primary_media_id = media.id
+    log_activity(db, user, "media_added", ind, "ağaç görseli seçildi")
+    db.commit()
+    db.refresh(media)
+    return _media_out(media, ind.primary_media_id)
 
 
 # ---- Anekdotlar ----

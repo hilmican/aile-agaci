@@ -85,6 +85,8 @@ class MediaOut(BaseModel):
     caption: str
     uploaded_at: datetime
     url: str = ""
+    thumb_url: str = ""
+    is_primary: bool = False
 
 
 class IndividualSummary(IndividualBase):

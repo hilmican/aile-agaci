@@ -48,6 +48,9 @@ class Individual(Base):
     phone: Mapped[str] = mapped_column(String(100), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
     address: Mapped[str] = mapped_column(String(500), default="")
+    # Ağaç kartında / listelerde gösterilecek görsel (media.id). FK yok:
+    # media -> individuals FK'siyle döngü oluşmasın; silmede elle temizlenir.
+    primary_media_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -211,6 +214,8 @@ class Media(Base):
         ForeignKey("individuals.id", ondelete="CASCADE"), index=True
     )
     filename: Mapped[str] = mapped_column(String(255))
+    # Küçük (kare, WEBP) sürüm; üretilemediyse boş kalır ve orijinale düşülür.
+    thumb_filename: Mapped[str] = mapped_column(String(255), default="")
     original_name: Mapped[str] = mapped_column(String(255), default="")
     content_type: Mapped[str] = mapped_column(String(100), default="")
     caption: Mapped[str] = mapped_column(String(255), default="")

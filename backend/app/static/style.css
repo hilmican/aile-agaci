@@ -116,6 +116,9 @@ label input, label select { color: var(--ink); }
 .media-item img { width: 110px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
 .media-item .cap { font-size: 0.7rem; color: var(--muted); }
 .media-item .del { position: absolute; top: 4px; right: 4px; background: #000000aa; padding: 0 0.35rem; border-radius: 4px; }
+.media-item .star { position: absolute; top: 4px; left: 4px; background: #000000aa; padding: 0 0.3rem; border-radius: 4px; cursor: pointer; color: #ffd166; }
+.media-item .star.on { cursor: default; }
+.media-item.primary img { border-color: #ffd166; box-shadow: 0 0 0 2px #ffd16655; }
 
 /* Tree */
 .tree-controls { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }

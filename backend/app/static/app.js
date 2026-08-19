@@ -665,8 +665,18 @@ function anecdoteHtml(a) {
 
 function mediaHtml(m) {
   const del = canEdit() ? `<span class="del" data-media="${m.id}">✕</span>` : "";
-  return `<div class="media-item">
-    <img src="${esc(m.url)}" alt="${esc(m.caption)}" />
+  // Ağaç görseli seçimi: seçili olan yıldızlı, diğerlerinde tıklanabilir buton.
+  const star = m.is_primary
+    ? `<span class="star on" title="Ağaçta bu görsel kullanılıyor">★</span>`
+    : (canEdit()
+        ? `<span class="star" data-primary="${m.id}" title="Ağaçta bunu kullan">☆</span>`
+        : "");
+  // Küçük sürüm: galeri 110px kutuda orijinali indirmesin.
+  return `<div class="media-item${m.is_primary ? " primary" : ""}">
+    <a href="${esc(m.url)}" target="_blank" rel="noopener">
+      <img src="${esc(m.thumb_url || m.url)}" alt="${esc(m.caption)}" loading="lazy" />
+    </a>
+    ${star}
     ${del}
     ${m.caption ? `<div class="cap">${esc(m.caption)}</div>` : ""}
   </div>`;
@@ -850,6 +860,13 @@ document.addEventListener("click", (e) => {
     if (!confirm("Görseli sil?")) return;
     api(`/api/individuals/${state.selectedId}/media/${del.dataset.media}`, { method: "DELETE" })
       .then(() => { toast("Silindi"); selectPerson(state.selectedId); })
+      .catch((err) => toast(err.message, true));
+    return;
+  }
+  const pick = e.target.closest("[data-primary]");
+  if (pick && state.selectedId) {
+    api(`/api/individuals/${state.selectedId}/media/${pick.dataset.primary}/primary`, { method: "POST" })
+      .then(() => { toast("Ağaç görseli güncellendi"); selectPerson(state.selectedId); })
       .catch((err) => toast(err.message, true));
   }
 });

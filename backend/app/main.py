@@ -1,4 +1,5 @@
 import os
+import threading
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
@@ -8,7 +9,8 @@ from sqlalchemy import select, text
 from .config import settings
 from .database import Base, SessionLocal, engine, wait_for_db
 from .gedcom import clean_text
-from .models import Individual, Spouse, User
+from .images import make_thumbnail
+from .models import Individual, Media, Spouse, User
 from .routers import (
     auth, bulk, dashboard, dna, families, gedcom_router, individuals, map_router, users,
 )
@@ -87,12 +89,29 @@ def ensure_schema() -> None:
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS detail_at TIMESTAMPTZ",
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS tofr_side VARCHAR(12) NOT NULL DEFAULT ''",
         "ALTER TABLE dna_matches ADD COLUMN IF NOT EXISTS manual_side VARCHAR(12) NOT NULL DEFAULT ''",
+        "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumb_filename VARCHAR(255) NOT NULL DEFAULT ''",
+        "ALTER TABLE individuals ADD COLUMN IF NOT EXISTS primary_media_id INTEGER",
         # Eski serbest 'period' değerini başlangıç sütununa taşı (yalnız boşsa).
         "UPDATE residences SET period_start = period WHERE period_start = '' AND period <> ''",
     ]
     with engine.begin() as conn:
         for stmt in alters:
             conn.execute(text(stmt))
+
+
+def backfill_thumbnails() -> None:
+    """Küçük sürümü olmayan eski görseller için thumbnail üretir.
+
+    Startup'ı bloklamamak için ayrı thread'de çalışır (yüzlerce görselde
+    saniyeler sürebilir; sağlık kontrolü bu sırada beklemesin). Idempotent."""
+    with SessionLocal() as db:
+        rows = db.scalars(select(Media).where(Media.thumb_filename == "")).all()
+        for m in rows:
+            name = make_thumbnail(settings.upload_dir, m.filename)
+            if name:
+                m.thumb_filename = name
+        if rows:
+            db.commit()
 
 
 @app.on_event("startup")
@@ -103,6 +122,7 @@ def on_startup() -> None:
     os.makedirs(settings.upload_dir, exist_ok=True)
     seed_admin()
     cleanup_imported_text()
+    threading.Thread(target=backfill_thumbnails, daemon=True).start()
 
 
 app.include_router(auth.router)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import ActivityLog, Anecdote, Individual, Media, ParentChild, Spouse, User
 from ..security import get_current_user
+from .individuals import person_photo_url
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -243,9 +244,8 @@ def dashboard_list(kind: str, db: Session = Depends(get_db), _: User = Depends(g
         people = sorted(people, key=lambda p: (p.last_name, p.first_name))
         items = []
         for p in people:
-            first = p.media[0].filename if p.media else None
             ref = _person_ref(p)
-            ref["photo"] = f"/uploads/{first}" if first else None
+            ref["photo"] = person_photo_url(p)
             items.append(ref)
         return {"kind": kind, "title": "Fotoğraflı Kişiler", "items": items}
 
